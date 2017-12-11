@@ -86,6 +86,18 @@ Fragment Shader是逐像素执行，所以会尽量控制计算的复杂度。�
 
 
 
+#### BabylonJS Shader 中shader 写法实践ABC
+
+- `ShaderMaterial(name, scene, option)`, 
+- `option`, 
+- `常用变量。。。world,worldViewProjection, on";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6"`, 
+
+
+
+
+
+
+
 #### webgl Shader 事例截图
 
 ![](screenshots/earthring.png)
