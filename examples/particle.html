@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+		var zero = BABYLON.Mesh.CreateBox("foutain", 1.0, scene);
+		zero.isVisible = false;
+
+		var camera = new BABYLON.ArcFollowCamera("camera",0,1,10,zero,scene);
+		camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
+		camera.orthoLeft = -50;
+		camera.orthoRight = 50;
+		camera.orthoBottom = -50;
+		camera.orthoTop = 50;
+
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var fountain = BABYLON.Mesh.CreateBox("foutain", 1.0, scene);
+		fountain.isVisible = false;
+
+		 // Create a particle system
+	    var particleSystem = new BABYLON.ParticleSystem("particles", 2000, scene);
+
+
+	    //Texture of each particle
+	    particleSystem.particleTexture = new BABYLON.Texture("images/flare.png", scene);
+
+	    // Where the particles come from
+	    particleSystem.emitter = fountain; // the starting object, the emitter
+	    particleSystem.minEmitBox = new BABYLON.Vector3(-1, 0, 0); // Starting all from
+	    particleSystem.maxEmitBox = new BABYLON.Vector3(1, 0, 0); // To...
+
+	    // Colors of all particles
+	    particleSystem.color1 = new BABYLON.Color4(0.7, 0.8, 1.0, 1.0);
+	    particleSystem.color2 = new BABYLON.Color4(0.2, 0.5, 1.0, 1.0);
+	    particleSystem.colorDead = new BABYLON.Color4(0, 0, 0.2, 0.0);
+
+	    // Size of each particle (random between...
+	    particleSystem.minSize = 0.1;
+	    particleSystem.maxSize = 0.5;
+
+	    // Life time of each particle (random between...
+	    particleSystem.minLifeTime = 0.3;
+	    particleSystem.maxLifeTime = 1.5;
+
+	    // Emission rate
+	    particleSystem.emitRate = 1500;
+
+	    // Blend mode : BLENDMODE_ONEONE, or BLENDMODE_STANDARD
+	    particleSystem.blendMode = BABYLON.ParticleSystem.BLENDMODE_ONEONE;
+
+	    // Set the gravity of all particles
+	    particleSystem.gravity = new BABYLON.Vector3(0, -9.81, 0);
+
+	    // Direction of each particle after it has been emitted
+	    particleSystem.direction1 = new BABYLON.Vector3(-7, 8, 3);
+	    particleSystem.direction2 = new BABYLON.Vector3(7, 8, -3);
+
+	    // Angular speed, in radians
+	    particleSystem.minAngularSpeed = 0;
+	    particleSystem.maxAngularSpeed = Math.PI;
+
+	    // Speed
+	    particleSystem.minEmitPower = 1;
+	    particleSystem.maxEmitPower = 3;
+	    particleSystem.updateSpeed = 0.005;
+
+	    // Start the particle system
+	    // particleSystem.start();
+
+	    scene.onPointerDown = function(){
+	    	particleSystem.start();
+	    }
+
+	    scene.onPointerMove = function(){
+	    	var u = BABYLON.Vector3.Unproject(new BABYLON.Vector3(this.pointerX, this.pointerY, 0.1), engine.getRenderWidth(),
+                        engine.getRenderHeight(),
+                        BABYLON.Matrix.Identity(), scene.getViewMatrix(),
+                        scene.getProjectionMatrix());
+
+	    	fountain.position = u;
+	    }
+
+	    scene.onPointerUp = function(){
+	    	particleSystem.stop();
+	    }
+
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+	
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

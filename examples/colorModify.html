@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		uniform mat4 worldViewProjection;
+		uniform mat4 textureMatrix;
+
+		attribute vec3 position;
+		attribute vec2 uv;
+
+		varying vec2 vTexCoord;
+		void main()
+		{
+			vec4 texCoord4;
+			texCoord4 = (textureMatrix * vec4(uv.x, uv.y, 0.0, 1.0));
+			vTexCoord = texCoord4.xy;
+			
+			gl_Position = worldViewProjection * vec4(position, 1.0);
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		uniform sampler2D uTexture;
+		uniform vec4 colorModifier;
+
+		varying vec2 vTexCoord;
+		void main() {
+			gl_FragColor = texture2D(uTexture, vTexCoord);
+			gl_FragColor = gl_FragColor * colorModifier;
+		}		
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+		scene.activeCamera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateGround("ground1", 100, 100, 2, scene);//BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		// sphere.backFaceCulling = false;
+		camera.orthoLeft = -50;
+		camera.orthoRight = 50;
+		camera.orthoBottom = -50;
+		camera.orthoTop = 50;
+
+
+		sphere.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+		sphere.rotate(BABYLON.Axis.X,Math.PI/2.0,BABYLON.Space.WORLD);
+
+		var mat1 = new BABYLON.StandardMaterial('',scene);
+		sphere.material = mat1;
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		var assetsManager = new BABYLON.AssetsManager(scene);
+
+		assetsManager.addTextureTask("images/s2.png", "images/s2.png");
+		assetsManager.addTextureTask("images/s3.png", "images/s3.png");
+		assetsManager.addTextureTask("images/s4.png", "images/s4.png");
+
+		assetsManager.load();
+		
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:['worldViewProjection','textureMatrix','uTexture','colorModifier']
+	    });
+
+
+		blendMaterial.setVector4('colorModifier',new BABYLON.Vector4(1.0,0.1,0.5,1));// 可修改 rgba
+	   
+		sphere.material = blendMaterial;
+		sphere.material.backFaceCulling = false;
+
+		assetsManager.onFinish = () => {
+			blendMaterial.setTexture('uTexture',new BABYLON.Texture('images/sw1.jpg',scene, true));
+		}
+
+
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision highp float;
+
+		//VERTEX SHADER REF http://www.babylonjs.com/CYOS/#1H3Z8T#5
+
+		// Attributes (PASSED IN FROM CPU)
+
+		//the pixel on the screen (but with a z of where the screen is maybe.)
+		attribute vec3 position;
+		//mesh normals *OR* screen normal; not sure. probably mesh normal
+		attribute vec3 normal;
+		//don't know:
+		attribute vec2 uv;
+
+		// Uniforms (PASSED IN FROM CPU)
+		// um, don't know.
+		uniform mat4 worldViewProjection;
+		//um don't know
+		uniform mat4 worldView;
+		//something to do with the texture cube:
+		//uniform mat4 TextureMatrix;
+
+		uniform float time;
+
+		// Varying : READ AND WRITE. PASSED TO FRAGMENT SHADER
+		varying vec4 vPosition;
+		varying vec3 vNormal;
+
+		//3rd edition refraction:
+		const float Eta = 0.56; // Ratio of indices of refraction
+		const float FresnelPower = 3.0;//5.0; //5 is physically correct. 3 is like cartoon (effect/trick)
+		const float F = ((1.0-Eta) * (1.0-Eta)) / ((1.0+Eta) * (1.0+Eta));
+		varying vec3 Reflect;
+		varying vec3 Refract;
+		varying float Ratio;
+		varying float colorIndex;
+
+
+		float rand(vec2 co)
+		{
+		    highp float a = 12.9898;
+		    highp float b = 78.233;
+		    highp float c = 43758.5453;
+		    highp float dt= dot(co.xy ,vec2(a,b));
+		    highp float sn= mod(dt,3.14);
+		    return fract(sin(sn) * c);
+		}
+
+		void main() {
+
+		    //give the screen voxel a fourth dimension (think magnification)
+		    vec4 p = vec4( position, 1. );
+
+		    //the vec4 representing the screen voxel (and scale)
+		    vPosition = p;
+		    //I am gonig to say mesh normal (at this single vertex)
+		    vNormal = normal;
+
+		    //gl_Position = worldViewProjection * p;
+		    
+		    
+		    //vec4 ecPosition = MVMatrix * MCvertex;
+		    //vec3 ecPosition3 = ecPosition.xyz / ecPosition.w;
+
+			vec3 i = normalize( vec3( worldView * vPosition ) ); //normalize(ecPosition3);
+			vec3 n = normalize( worldView * vec4(vNormal, 0.0) ).xyz; //normalize(NormalMatrix * MCnormal);
+			Ratio = F + (1.0 - F) * pow((1.0 - dot(-i, n)), FresnelPower);
+
+			//an idea (test) (we might say 4% or work out the real ratio)
+			    if(Ratio < 0.1)
+			    {
+			    	//clamp
+			    	Ratio = 0.1; 
+			    }
+
+
+			//now we also want a random pink colour for the full face (we say vertex)
+			//get a random integer between one and ten
+			//select a pink:
+			//float colorIndex = float(int( fract(rand(Refract.xy)) * 10.0 ));
+
+			vec2 wer = vec2(time,-time);
+			colorIndex = rand( i.xy ); 
+
+			Refract = refract(i, n, Eta);
+			//Refract = vec3(TextureMatrix * vec4(Refract, 1.0));
+			Reflect = reflect(i, n);
+			//Reflect = vec3(TextureMatrix * vec4(Reflect, 1.0));
+			gl_Position = worldViewProjection * p; //MVPMatrix * MCvertex;
+
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		precision highp float;
+
+		//passed in from CPU
+
+		uniform mat4 worldView;
+
+		//READ ONLY. PASSED FROM VERTEX SHADER
+		varying vec4 vPosition;
+		varying vec3 vNormal;
+
+		//passed in from CPU
+		uniform sampler2D textureSampler;
+		uniform sampler2D refSampler;
+		uniform samplerCube hdrSampler;
+
+
+		//3rd edition refraction:
+		//uniform samplerCube Cubemap;
+		varying vec3 Reflect;
+		varying vec3 Refract;
+		varying float Ratio;
+		varying float colorIndex;
+
+		void main(void) {
+
+		    // vec3 color = mix(refractColor, reflectColor, Ratio);
+		    // vec3 color = refractColor;
+		    // vec3 color = reflectColor;
+		    // gl_FragColor = vec4(color, 1.0);
+		    // gl_FragColor = vec4( color, 1. );
+		    // gl_FragColor = vec4(Ratio, Ratio, Ratio, 1.0);
+		    
+		    // //or discard: (and anti-alias post-process)
+		    // if(Ratio < 0.8)
+		    // {
+		    // 	discard;
+		    // }
+		    
+		    //fresnel white reflection, alpha otherwise:
+		    // gl_FragColor = vec4(colorIndex, 0, 0, Ratio);
+		    //NOW GET THIS ALPHA BLENDED AFTER SHADING
+		    
+
+		
+		    //'eye' ray : the screen ray normalised and projected onto the 'worldView'
+		    vec3 e = normalize( vec3( worldView * vPosition ) );
+		    //'normal' : the mesh normal normailised and projected onto the 'worldView'
+		    vec3 n = normalize( worldView * vec4(vNormal, 0.0) ).xyz;
+
+		    //the reflected ray; the e ray reflected about the n normal
+		    vec3 r = reflect( e, n );
+		    
+		    //a spherical mapping for UV
+		    float m = 2. * sqrt(
+		        pow( r.x, 2. ) +
+		        pow( r.y, 2. ) +
+		        pow( r.z + 1., 2. )
+		    );
+		    
+		    //UV; why this formula?
+		    vec2 vN = r.xy / m + .5;
+
+		    //fetch the texture colour of this pixel from the 2D texture map (bitmap image)
+		    vec3 base = texture2D( refSampler, vN).rgb;
+
+		    gl_FragColor = vec4( base, 1. );
+		    
+		    
+		}				
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:['position','uv','normal'],
+	    	uniforms:['worldViewProjection','worldView','time','textureSampler','refSampler','hdrSampler']
+	    });
+
+	    blendMaterial.setTexture('textureSampler',new BABYLON.Texture('images/cloud.png',scene,null,true));
+	    blendMaterial.setTexture('refSampler',new BABYLON.Texture('images/flare.png',scene,null,true));
+	    blendMaterial.setTexture('textureSampler',new BABYLON.CubeTexture('images/skybox2',scene,null,true));
+
+	    blendMaterial.setFloat('time', 1.0);
+		sphere.material = blendMaterial;
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

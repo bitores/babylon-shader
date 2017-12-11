@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision highp float;
+
+		// Attributes
+		attribute vec3 position;
+		attribute vec3 normal;
+		attribute vec2 uv;
+
+
+		// Uniforms
+		uniform mat4 world;
+		uniform mat4 worldViewProjection;
+
+		// Varying
+		varying vec3 vPosition;
+		varying vec3 vNormal;
+		varying vec2 vUV;
+
+		void main(void) {
+		    gl_Position = worldViewProjection * vec4(position, 1.0);
+
+	
+		    vPosition = vec3(world * vec4(position, 1.0));
+    		vNormal = normalize(vec3(world * vec4(normal, 0.0)));
+    		vUV = uv;
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		#ifdef GL_FRAGMENT_PRECISION_HIGH
+		    precision highp float;
+		#else
+		    precision mediump float;
+		#endif
+
+		// Varying
+		varying vec3 vPosition;
+		varying vec3 vNormal;
+		varying vec2 vUV;
+
+		// Refs
+		uniform sampler2D texture;
+		uniform vec3 cameraPosition;
+
+		void main(void) {
+			vec4 color0 = texture2D(texture, vUV);
+		    vec3 color = vec3(1., 1., 1.);
+
+
+		    vec3 viewDirectionW = normalize(cameraPosition - vPosition);
+
+		    // Fresnel
+			float fresnelTerm = dot(viewDirectionW, vNormal);
+			fresnelTerm = clamp(1.0 - fresnelTerm, 0., 1.);
+
+			gl_FragColor = color0 * vec4(color * fresnelTerm, 1.);
+			// gl_FragColor = color * vec4(color * fresnelTerm, 1.);
+		}		
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		var mat1 = new BABYLON.StandardMaterial('',scene);
+		sphere.material = mat1;
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:['position','normal','uv'],
+	    	uniforms:['worldViewProjection','world','texture','cameraPosition']
+	    });
+		var texture = new BABYLON.Texture('images/crate.png',scene);
+
+	    blendMaterial.setTexture('texture',texture);
+	    blendMaterial.setVector3('cameraPosition',scene.activeCamera.position);
+		sphere.material = blendMaterial;
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

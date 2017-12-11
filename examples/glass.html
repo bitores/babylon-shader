@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+precision highp float;
+
+// Attributes
+attribute vec3 position;
+attribute vec3 normal;
+
+// Uniforms
+uniform mat4 world;
+uniform mat4 worldViewProjection;
+
+// Varying
+varying vec3 vPositionW;
+varying vec3 vNormalW;
+
+void main(void) {
+    vec4 outPosition = worldViewProjection * vec4(position, 1.0);
+    gl_Position = outPosition;
+
+    vPositionW = vec3(world * vec4(position, 1.0));
+}
+
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+precision highp float;
+
+varying vec3 vPositionW;
+
+uniform vec3 source1;
+uniform float sqrSourceDist1;
+
+uniform vec3 source2;
+uniform float sqrSourceDist2;
+
+uniform vec3 source3;
+uniform float sqrSourceDist3;
+
+uniform vec3 source4;
+uniform float sqrSourceDist4;
+
+void main(void) {
+  float vSqrSourceDist1 = dot(source1 - vPositionW, source1 - vPositionW);
+  float delta1 = sqrSourceDist1 - vSqrSourceDist1;
+  float rangeTerm1 = 0.;
+  if (delta1 > 0.) {
+    rangeTerm1 = 1. / ((delta1 * delta1) / 8. + 1.);
+  }
+
+  float vSqrSourceDist2 = dot(source2 - vPositionW, source2 - vPositionW);
+  float delta2 = sqrSourceDist2 - vSqrSourceDist2;
+  float rangeTerm2 = 0.;
+  if (delta2 > 0.) {
+    rangeTerm2 = 1. / ((delta2 * delta2) / 8. + 1.);
+  }
+
+  float vSqrSourceDist3 = dot(source3 - vPositionW, source3 - vPositionW);
+  float delta3 = sqrSourceDist3 - vSqrSourceDist3;
+  float rangeTerm3 = 0.;
+  if (delta3 > 0.) {
+    rangeTerm3 = 1. / ((delta3 * delta3) / 8. + 1.);
+  }
+
+  float vSqrSourceDist4 = dot(source4 - vPositionW, source4 - vPositionW);
+  float delta4 = sqrSourceDist4 - vSqrSourceDist4;
+  float rangeTerm4 = 0.;
+  if (delta4 > 0.) {
+    rangeTerm4 = 1. / ((delta4 * delta4) / 8. + 1.);
+  }
+
+  gl_FragColor = vec4(rangeTerm1 + rangeTerm2 + rangeTerm3 + rangeTerm4, rangeTerm1 + rangeTerm2 + rangeTerm3 + rangeTerm4, rangeTerm1 + rangeTerm2 + rangeTerm3 + rangeTerm4, 1);
+}
+		
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		var mat1 = new BABYLON.StandardMaterial('',scene);
+		sphere.material = mat1;
+
+	
+
+        var glassMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes: ["position", "normal", "uv"],
+            uniforms: ["world", "worldView", "worldViewProjection"],
+	    });
+
+        
+        var k1 = 0;
+        var k2 = 5;
+        var k3 = 10;
+        var k4 = 15;
+
+        scene.registerBeforeRender(function () {
+            if (glassMaterial) {
+                glassMaterial.setVector3("source1", camera.globalPosition);
+                glassMaterial.setVector3("source2", camera.globalPosition);
+                glassMaterial.setVector3("source3", camera.globalPosition);
+                glassMaterial.setVector3("source4", camera.globalPosition);
+                var srcDist1 = k1;
+                var srcDist2 = k2;
+                var srcDist3 = k3;
+                var srcDist4 = k4;
+                k1 += 0.05;
+                if (k1 > 20) {
+                    k1 = 0;
+                }
+                k2 += 0.05;
+                if (k2 > 20) {
+                    k2 = 0;
+                }
+                k3 += 0.05;
+                if (k3 > 20) {
+                    k3 = 0;
+                }
+                k4 += 0.05;
+                if (k4 > 20) {
+                    k4 = 0;
+                }
+                glassMaterial.setFloat("sqrSourceDist1", srcDist1 * srcDist1);
+                glassMaterial.setFloat("sqrSourceDist2", srcDist2 * srcDist2);
+                glassMaterial.setFloat("sqrSourceDist3", srcDist3 * srcDist3);
+                glassMaterial.setFloat("sqrSourceDist4", srcDist4 * srcDist4);
+            }
+        });
+
+        glassMaterial.backFaceCulling = true;
+
+
+
+        engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+
+		sphere.material = glassMaterial;
+
+    camera.zoomOn([sphere]);
+
+
+    // BABYLON.SceneLoader.ImportMesh("", "https://redfoxblob.blob.core.windows.net/a7d8a0cc-99bc-440e-9b67-583293212f04/", "1872223972.glb", scene, function (meshes) {
+    //     var rootMesh1 = new BABYLON.Mesh("modelRoot");
+    //     meshes.forEach(mesh => {
+    //         if (!mesh.parent) {
+    //             mesh.setParent(rootMesh1);
+    //         }
+    //     });
+
+    //   });
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

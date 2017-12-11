@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.3.0.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision highp float;
+		// Attributes
+		attribute vec3 position;
+		// Uniforms
+		uniform mat4 worldViewProjection;
+		void main(void) {
+		    gl_Position = worldViewProjection * vec4(position, 1.0);
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		vec3 godrays(
+		    float density,
+		    float weight,
+		    float decay,
+		    float exposure,
+		    int numSamples,
+		    sampler2D occlusionTexture,
+		    vec2 screenSpaceLightPos,
+		    vec2 uv
+		    ) {
+
+		    vec3 fragColor = vec3(0.0,0.0,0.0);
+
+			vec2 deltaTextCoord = vec2( uv - screenSpaceLightPos.xy );
+
+			vec2 textCoo = uv.xy ;
+			deltaTextCoord *= (1.0 /  float(numSamples)) * density;
+			float illuminationDecay = 1.0;
+
+
+			for(int i=0; i < 100 ; i++){
+
+
+		        /*
+		        This makes sure that the loop only runs `numSamples` many times.
+		        We have to do it this way in WebGL, since you can't have a for loop
+		        that runs a variable number times in WebGL.
+		        This little hack gets around that.
+		        But the drawback of this is that we have to specify an upper bound to the
+		        number of iterations(but 100 is good enough for almost all cases.)
+		        */
+			    if(numSamples < i) {
+		            break;
+			    }
+
+				textCoo -= deltaTextCoord;
+				vec3 samp = texture2D(occlusionTexture, textCoo   ).xyz;
+				samp *= illuminationDecay * weight;
+				fragColor += samp;
+				illuminationDecay *= decay;
+			}
+
+			fragColor *= exposure;
+
+		    return fragColor;
+
+
+		}
+		void main(void) {
+		    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.);
+		}		
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		var mat1 = new BABYLON.StandardMaterial('',scene);
+		sphere.material = mat1;
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:['position'],
+	    	uniforms:['worldViewProjection']
+	    });
+		
+		sphere.material = blendMaterial;
+
+		sphere.pickable = true;
+		scene.onPointerDown = function(evt, pickInfo){
+			// console.log(pickInfo)
+			if(pickInfo.hit) {
+				var mesh = pickInfo.pickedMesh,
+					point = pickInfo.pickedPoint;
+				console.log(mesh, point);
+				var positions = mesh.getFacetLocalPositions();
+    			var normals = mesh.getFacetLocalNormals();
+    			console.log(positions, normals);
+				var indexes = mesh.getFacetsAtLocalCoordinates(point.x, point.y, point.z);
+				if (indexes != null) {
+				    var worldPos = mesh.getFacetPosition(indexes[0]);
+
+				    console.log(worldPos)
+				} else {
+					console.log(indexes)
+				}
+			}
+		}
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

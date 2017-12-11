@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		/**
+		* Example Vertex Shader
+		* Sets the position of the vertex by setting gl_Position
+		*/
+
+		// Set the precision for data types used in this shader
+		precision highp float;
+		precision highp int;
+
+		// Default THREE.js uniforms available to both fragment and vertex shader
+		// uniform mat4 modelMatrix;
+		uniform mat4 worldViewProjection;
+		// uniform mat4 projectionMatrix;
+		// uniform mat4 viewMatrix;
+		// uniform mat3 normalMatrix;
+
+		// Default uniforms provided by ShaderFrog.
+		// uniform vec3 cameraPosition;
+		// uniform float time;
+
+		// Default attributes provided by THREE.js. Attributes are only available in the
+		// vertex shader. You can pass them to the fragment shader using varyings
+		attribute vec3 position;
+		attribute vec3 normal;
+		attribute vec2 uv;
+		// attribute vec2 uv2;
+
+		// Examples of variables passed from vertex to fragment shader
+		// varying vec3 vPosition;
+		// varying vec3 vNormal;
+		varying vec2 vUv;
+		// varying vec2 vUv2;
+
+		void main() {
+
+		    // To pass variables to the fragment shader, you assign them here in the
+		    // main function. Traditionally you name the varying with vAttributeName
+		    // vNormal = normal;
+		    vUv = uv;
+		    // vUv2 = uv2;
+		    // vPosition = position;
+
+		    // This sets the position of the vertex in 3d space. The correct math is
+		    // provided below to take into account camera and object data.
+		    gl_Position = worldViewProjection * vec4( position, 1.0 );
+
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		precision highp float;
+		varying vec2 vUv;
+
+		uniform float time;
+		uniform vec2 resolution;
+		mat2 m = mat2(0.90, 0.110, -0.70, 1.00);
+		float ha(float n) 
+		{
+		    return fract(sin(n) * 758.5453);
+		}
+		float no(in vec3 x) 
+		{
+		    vec3 p = floor(x);
+		    vec3 f = fract(x);
+		    float n = p.x + p.y * 57.0 + p.z * 800.0;
+		    float res = mix(mix(mix(ha(n + 0.0), ha(n + 1.0), f.x), mix(ha(n + 57.0), ha(n + 58.0), f.x), f.y), mix(mix(ha(n + 800.0), ha(n + 801.0), f.x), mix(ha(n + 857.0), ha(n + 858.0), f.x), f.y), f.z);
+		    return res;
+		}
+		float fbm(vec3 p) 
+		{
+		    float f = 0.0;
+		    f += 0.50000 * no(p);
+		    p = p * 2.02;
+		    f -= 0.25000 * no(p);
+		    p = p * 2.03;
+		    f += 0.12500 * no(p);
+		    p = p * 2.01;
+		    f += 0.06250 * no(p);
+		    p = p * 2.04;
+		    f -= 0.03125 * no(p);
+		    return f / 0.984375;
+		}
+		float cloud(vec3 p) 
+		{
+		    p -= fbm(vec3(p.x, p.y, 0.0) * 0.5) * 2.25;
+		    float a = 0.0;
+		    a -= fbm(p * 3.0) * 2.2 - 1.1;
+		    if (a < 0.0) a = 0.0;
+		     a = a * a;
+		    return a;
+		}
+		vec3 f2(vec3 c) 
+		{
+		    c += ha(vUv.x + vUv.y * 9.9) * 0.01;
+		    c *= 0.7 - length(vUv.xy / resolution.xy - 0.5) * 0.7;
+		    float w = length(c);
+		    c = mix(c * vec3(1.0, 1.0, 1.6), vec3(w, w, w) * vec3(1.4, 1.2, 1.0), w * 1.1 - 0.2);
+		    return c;
+		}
+		void main(void) 
+		{
+		    vec2 position = (vUv.xy / resolution.xy);
+		    position.y += 0.2;
+		    vec2 coord = vec2((position.x - 0.5) / position.y, 1.0 / (position.y + 0.2));
+		    coord += time * 0.1;
+		    float q = cloud(vec3(coord * 1.0, 0.222));
+		    vec3 col = vec3(0.2, 0.4, 0.5) + vec3(q * vec3(0.2, 0.4, 0.1));
+		    gl_FragColor = vec4(f2(col), 1.0);
+		}
+				
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:["position", "normal", "uv"],
+	    	uniforms:['worldViewProjection']
+	    });
+
+
+	    // blendMaterial.setColor3('color', new BABYLON.Color3(0.27450980392156865, 0.5019607843137255, 0.5686274509803921));
+	    blendMaterial.setVector2('resolution', new BABYLON.Vector2(window.innerWidth, window.innerHeight));
+	    // blendMaterial.setFloat('speed', 0.02);
+	    // blendMaterial.setFloat('brightness', 5.0);
+	    blendMaterial.setFloat('time', 1.0);
+
+	    blendMaterial.backFaceCulling = false;
+
+		sphere.material = blendMaterial;
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

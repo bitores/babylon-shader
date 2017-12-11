@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		/**
+		* Example Vertex Shader
+		* Sets the position of the vertex by setting gl_Position
+		*/
+
+		// Set the precision for data types used in this shader
+		precision highp float;
+		precision highp int;
+
+		// Default THREE.js uniforms available to both fragment and vertex shader
+		uniform mat4 modelMatrix;
+		uniform mat4 worldViewProjection;
+		uniform mat4 world;
+		uniform mat4 viewMatrix;
+		uniform mat3 normalMatrix;
+		/////
+		// Default uniforms provided by ShaderFrog.
+		uniform vec3 cameraPosition;
+		uniform float time;
+		uniform float v;
+		uniform vec2 resolution;
+		// Default attributes provided by THREE.js. Attributes are only available in the
+		// vertex shader. You can pass them to the fragment shader using varyings
+		attribute vec3 position;
+		attribute vec3 normal;
+		attribute vec2 uv;
+		attribute vec2 uv2;
+
+		// Examples of variables passed from vertex to fragment shader
+		varying vec3 vPosition;
+		varying vec3 vNormal;
+		varying vec2 vUv;
+		varying vec2 vUv2;
+
+		void main() {
+
+		    // To pass variables to the fragment shader, you assign them here in the
+		    // main function. Traditionally you name the varying with vAttributeName
+		    vNormal = normal;
+		    vUv = uv;
+		    vUv2 = uv2;
+		   vPosition = position;
+		    // This sets the position of the vertex in 3d space. The correct math is
+		    // provided below to take into account camera and object data.
+		    gl_Position = worldViewProjection * world * vec4( vPosition, 1.0 );
+
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		precision highp float;
+		precision highp int;
+		uniform vec2 resolution;
+		uniform float time;
+		varying vec2 vUv;
+		vec3 mod289(vec3 x) 
+		{
+		    return x - floor(x * (1.0 / 289.0)) * 289.0;
+		}
+		vec4 mod289(vec4 x) 
+		{
+		    return x - floor(x * (1.0 / 289.0)) * 289.0;
+		}
+		vec4 permute(vec4 x) 
+		{
+		    return mod289(((x * 34.0) + 1.0) * x);
+		}
+		vec4 taylorInvSqrt(vec4 r) 
+		{
+		    return 1.79284291400159 - 0.85373472095314 * r;
+		}
+		float snoise(vec3 v) 
+		{
+		    const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+		    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+		    vec3 i = floor(v + dot(v, C.yyy));
+		    vec3 x0 = v - i + dot(i, C.xxx);
+		    vec3 g = step(x0.yzx, x0.xyz);
+		    vec3 l = 1.0 - g;
+		    vec3 i1 = min(g.xyz, l.zxy);
+		    vec3 i2 = max(g.xyz, l.zxy);
+		    vec3 x1 = x0 - i1 + C.xxx;
+		    vec3 x2 = x0 - i2 + C.yyy;
+		    vec3 x3 = x0 - D.yyy;
+		    i = mod289(i);
+		    vec4 p = permute(permute(permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+		    float n_ = 0.142857142857;
+		    vec3 ns = n_ * D.wyz - D.xzx;
+		    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+		    vec4 x_ = floor(j * ns.z);
+		    vec4 y_ = floor(j - 7.0 * x_);
+		    vec4 x = x_ * ns.x + ns.yyyy;
+		    vec4 y = y_ * ns.x + ns.yyyy;
+		    vec4 h = 1.0 - abs(x) - abs(y);
+		    vec4 b0 = vec4(x.xy, y.xy);
+		    vec4 b1 = vec4(x.zw, y.zw);
+		    vec4 s0 = floor(b0) * 2.0 + 1.0;
+		    vec4 s1 = floor(b1) * 2.0 + 1.0;
+		    vec4 sh = -step(h, vec4(0.0));
+		    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+		    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+		    vec3 p0 = vec3(a0.xy, h.x);
+		    vec3 p1 = vec3(a0.zw, h.y);
+		    vec3 p2 = vec3(a1.xy, h.z);
+		    vec3 p3 = vec3(a1.zw, h.w);
+		    vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+		    p0 *= norm.x;
+		    p1 *= norm.y;
+		    p2 *= norm.z;
+		    p3 *= norm.w;
+		    vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+		    m = m * m;
+		    return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+		}
+		void main() 
+		{
+		    vec2 div = vec2(10, 10);
+		    vec2 uv = vUv.xy / resolution.xy * div.xy;
+		    vec3 v = vec3(uv.x + sin(time) * 0.2, uv.y + cos(time) * 0.2, time / 10.0);
+		    float noise = snoise(v);
+		uv = vUv.xy / resolution.xy * div.xy;
+		    vec3 v2 = vec3(uv.x, uv.y, time / 5.0);
+		    noise = sin(noise * 3.14 * (sin(time) + snoise(v2) * 2.0) * 0.75);
+		    float darkenFactor = 0.2;
+		    float darkenValue = darkenFactor;
+		    div = vec2(5, 5);
+		    uv = vUv.xy / resolution.xy * div.xy;
+		    vec3 v3 = vec3(uv.x, uv.y, time / 2.0);
+		    darkenValue = darkenValue * snoise(v3);
+		    vec3 v4 = vec3(uv.x * 1000.0, uv.y * 1000.0, time);
+		    float b = snoise(v4) * 0.1;
+		    gl_FragColor = vec4(1.0 - darkenValue + (noise * (darkenValue + 0.2)) - b, noise - b, b, 1.0);
+		}				
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:["position", "normal", "uv"],
+	    	uniforms:["time","resolution", "world", "worldView", "worldViewProjection", "view", "projection"]
+	    });
+
+	    blendMaterial.setTexture('textureSampler',new BABYLON.Texture('images/crate.png',scene));
+	    blendMaterial.backFaceCulling = false;
+
+
+		sphere.material = blendMaterial;
+
+		var time = 0;
+		scene.registerBeforeRender(function(){
+	 		time++;
+	        if(sphere.material.getEffect && sphere.material.getEffect()){
+	            
+	        	sphere.material.getEffect().setVector2('resolution', new BABYLON.Vector2(1, 1));
+	        	sphere.material.getEffect().setFloat('time', time);
+	            
+	        }
+	    });
+
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

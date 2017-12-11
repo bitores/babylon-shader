@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="waveVertexShader">
+		precision highp float;
+
+		// Attributes
+		attribute vec3 position;
+		attribute vec3 normal;
+		attribute vec2 uv;
+
+		// Uniforms
+		uniform mat4 worldViewProjection;
+
+		// Varying
+		varying vec2 vUV;
+
+		void main(void) {
+		    gl_Position = worldViewProjection * vec4(position, 1.0);
+
+		    vUV = uv;
+		}
+	</script>
+	<script type="application/fragmentShader" id="waveFragmentShader">
+		precision highp float;
+
+		varying vec2 vUV;
+
+		// Refs
+		uniform sampler2D textureSampler;
+
+		void main(void) {
+		    vec3 color = texture2D(textureSampler, vUV).rgb;
+
+		    if (color.g > 0.5) {
+		        discard;
+		    }
+
+		    gl_FragColor = vec4(color, 1.);
+		}		
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		var mat1 = new BABYLON.StandardMaterial('',scene);
+		sphere.material = mat1;
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		})
+
+		// wave
+		var discardMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "waveVertexShader", 
+	    	fragmentElement: "waveFragmentShader"
+	    },{
+	    	attributes:['position','normal','uv'],
+	    	uniforms:['worldViewProjection','textureSampler']
+	    });
+		var texture = new BABYLON.Texture('./images/crate.png',scene);
+
+	    discardMaterial.setTexture('textureSampler',texture);
+		sphere.material = discardMaterial;
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// cameraPosition\textureSampler
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

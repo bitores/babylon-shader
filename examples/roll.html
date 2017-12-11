@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+
+		uniform mat4 worldViewProjection;
+		uniform mat4 textureMatrix;	
+
+		attribute vec3 position;
+		attribute vec2 uv;
+
+		uniform float uOffset;
+		uniform float uMode;
+
+		varying vec2 vPre;
+		varying vec2 vMiddle;
+		varying vec2 vNext;
+
+		void main()
+		{
+			vMiddle = vec4(uv.x, uv.y, 0.0, 1.0).xy;
+
+			// vPre = vMiddle - vec2(uOffset, 0) - vec2(1.0, 0.0);
+			// vNext = vMiddle - vec2(uOffset, 0) + vec2(1.0, 0.0);
+
+
+			vPre = vec2(1.0 + uv.x + uOffset, uv.y);
+			vNext = vec2(-1.0 + uv.x + uOffset, uv.y); ////////bug....方向有点反向
+			// 下面的 跟动效果
+			if(uMode==1.0){
+				vMiddle = vec2( 0.0 + uv.x + uOffset, uv.y);
+			} 
+			// 
+
+			// ----------
+			gl_Position = worldViewProjection * vec4(position, 1.0);
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+
+		uniform sampler2D uLeftTex;
+		uniform sampler2D uCurrentTex;
+		uniform sampler2D uRightTex;
+
+		
+
+		varying vec2 vPre;
+		varying vec2 vMiddle;
+		varying vec2 vNext;
+
+		void main() {
+
+			vec3 middle = texture2D(uCurrentTex, vMiddle).rgb;
+			vec3 next = texture2D(uRightTex, vNext).rgb;
+			vec3 pre = texture2D(uLeftTex, vPre).rgb;
+
+			// 0~1为屏幕范围内 显示
+
+			//  上下顺序可调整
+			// z-index: 0
+			if(vMiddle.x>0.0&&vMiddle.x<1.0) {
+				// middle
+				gl_FragColor = vec4(middle, 1.0);
+			} 
+
+			// z-index: 1
+			// off
+			if(vPre.x>0.0&&vPre.x<1.0) {
+				// pre
+				gl_FragColor = vec4(pre, 1.0);
+			} 
+
+			// z-index: 2
+			if(vNext.x>0.0&&vNext.x<1.0) {
+				// next
+				gl_FragColor = vec4(next, 1.0);
+			}
+		}
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+		scene.activeCamera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		
+
+		// sphere.backFaceCulling = false;
+		camera.orthoLeft = -50;
+		camera.orthoRight = 50;
+		camera.orthoBottom = -50;
+		camera.orthoTop = 50;
+
+
+		var sphere = BABYLON.Mesh.CreateGround("ground1", 100, 100, 2, scene);//BABYLON.Mesh.CreateSphere('',16,2, scene);
+		sphere.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+		sphere.rotate(BABYLON.Axis.X,Math.PI/2.0,BABYLON.Space.WORLD);
+
+
+		
+
+		
+		var assetsManager = new BABYLON.AssetsManager(scene);
+
+		assetsManager.addTextureTask("images/sw1.jpg", "images/sw1.jpg");
+		assetsManager.addTextureTask("images/sw2.jpg", "images/sw2.jpg");
+		assetsManager.addTextureTask("images/sw3.jpg", "images/sw3.jpg");
+		assetsManager.addTextureTask("images/sw4.jpg", "images/sw4.jpg");
+		assetsManager.addTextureTask("images/s1.jpg", "images/s1.jpg");
+		assetsManager.addTextureTask("images/s2.png", "images/s2.png");
+		assetsManager.addTextureTask("images/s3.png", "images/s3.png");
+		assetsManager.addTextureTask("images/s4.png", "images/s4.png");
+
+
+		assetsManager.addTextureTask("images/fruit.jpg", "images/fruit.jpg");
+
+		assetsManager.load();
+		
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:['worldViewProjection','textureMatrix','uOffset','uRightTex',"uLeftTex",'uCurrentTex','uMode']
+	    });
+
+		
+		
+	   
+		sphere.material = blendMaterial;
+		sphere.material.backFaceCulling = false;
+
+
+		var maskTexture = null;
+		var fOffset = 0.0;
+
+		
+		
+
+		var FLIP = {
+			current:0,
+			pages:[],
+			totale:0,
+			moveDir:1, // -1::left->right;  1::right->left
+			mode:1.0, // 1: 跟随方式  2：叠层方式 3
+			timer: null,
+			startX:0
+		};
+		
+		blendMaterial.setFloat('uMode',FLIP.mode);// 动画进行中
+		// 0 1 2 3 4 5 6 7 
+		var NextPage = function(dir){
+			// 1 left->right  -1 right->left
+
+			if(-1===dir){
+				// for right->left
+				--FLIP.current;	
+			} else if(1===dir) {
+				// for left->right
+				++FLIP.current;
+			} else {
+				// for reset
+				FLIP.current = 0;
+			}
+
+			if(FLIP.current>=FLIP.totale) {
+				// for ++ 开头
+				FLIP.current = 0;
+			} else if(FLIP.current<0) {
+				// for -- 结尾
+				FLIP.current = FLIP.totale-1;
+			}
+
+
+			var num = FLIP.current;
+			
+			console.log("-------------------------");
+			fOffset = 0.0;
+			blendMaterial.setFloat('uOffset',0.0);// mask 中间---
+
+	    	if(num ==0) {
+	    		blendMaterial.setTexture('uLeftTex',FLIP.pages[FLIP.totale-1]);
+	    		console.log(FLIP.totale-1);
+	    	} else {
+	    		blendMaterial.setTexture('uLeftTex',FLIP.pages[num-1]);
+	    		console.log(num-1);
+	    	}
+
+	    	blendMaterial.setTexture('uCurrentTex',FLIP.pages[num]);
+			console.log(num);
+
+			if(num >= FLIP.totale-1) {
+	    		blendMaterial.setTexture('uRightTex',FLIP.pages[0]);
+	    		console.log(0);
+	    	} else {
+	    		blendMaterial.setTexture('uRightTex',FLIP.pages[num+1]);
+	    		console.log(num+1);
+	    	}
+			
+		}
+
+		assetsManager.onFinish = () => {
+			maskTexture = new BABYLON.Texture('images/mask.jpg',scene, true);
+
+
+	    	FLIP.pages = [
+	    		new BABYLON.Texture('images/sw1.jpg',scene, true),
+	    		new BABYLON.Texture('images/sw2.jpg',scene, true),
+	    		new BABYLON.Texture('images/sw3.jpg',scene, true),
+	    		new BABYLON.Texture('images/sw4.jpg',scene, true),
+	    		new BABYLON.Texture('images/s1.jpg', scene, true),
+	    		new BABYLON.Texture('images/s2.png', scene, true),
+	    		new BABYLON.Texture('images/s3.png', scene, true),
+	    		new BABYLON.Texture('images/s4.png', scene, true)
+	    	];
+
+	    	FLIP.totale = FLIP.pages.length;
+
+
+	    	NextPage();
+		}
+
+
+		// var pointerdown = function(){
+			
+		// 	console.log(1212);
+			
+			
+		// }
+
+		// scene.onPointerMove = pointerdown;
+
+		// dir
+
+		scene.onPointerObservable.add((pointerInfo) => {
+			switch (pointerInfo.type) {
+				case BABYLON.PointerEventTypes.POINTERDOWN:
+					console.log("POINTER DOWN");
+					if(FLIP.timer==null) {
+						FLIP.startX = pointerInfo.event.x;
+					}
+					
+					// break;
+				case BABYLON.PointerEventTypes.POINTERUP:
+					console.log("POINTER UP");
+					// break;
+				case BABYLON.PointerEventTypes.POINTERMOVE:
+					console.log("POINTER MOVE");
+					
+					if(pointerInfo.event.x>FLIP.startX) {
+						FLIP.moveDir = -1;
+					} else {
+						FLIP.moveDir = 1;
+					}
+
+					if(FLIP.timer==null) {
+						
+
+						FLIP.timer = setInterval(function(){
+							
+							console.log(fOffset);
+							fOffset+=0.01;
+							if(fOffset>=1.0){
+								
+
+								NextPage(FLIP.moveDir);
+
+								clearInterval(FLIP.timer);
+								FLIP.timer = null;
+							}
+							blendMaterial.setFloat('uOffset',FLIP.moveDir * fOffset);// mask 中间缩放
+
+						},10);
+
+					}
+					break;
+				case BABYLON.PointerEventTypes.POINTERWHEEL:
+					console.log("POINTER WHEEL");
+					break;
+				case BABYLON.PointerEventTypes.POINTERPICK:
+					console.log("POINTER PICK");
+					break;
+				case BABYLON.PointerEventTypes.POINTERTAP:
+					console.log("POINTER TAP");
+					break;
+				case BABYLON.PointerEventTypes.POINTERDOUBLETAP:
+					console.log("POINTER DOUBLE-TAP");
+					break;
+	        }
+	    });
+
+
+
+		scene.beforeRender = function(){
+			// console.log('beforeRendre');
+
+			if(maskTexture) {
+				blendMaterial.setMatrix('textureMatrix', maskTexture.getTextureMatrix());	
+			}
+			
+		}
+
+
+		
+		// canvas.focus()
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

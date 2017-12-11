@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision highp float;
+		// Attributes
+		attribute vec3 position;
+		attribute vec3 normal;
+		// Uniforms
+		uniform mat4 worldViewProjection;
+		uniform float time;
+		void main(void) {
+		    vec3 p = position;
+		    vec3 j = vec3(0., -1.0, 0.);
+		    p = p + normal * log2(1. + time) * 25.0;
+		    gl_Position = worldViewProjection * vec4(p, 1.0);
+		}
+
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		
+		precision highp float;
+		uniform float time;
+		void main(void) {
+		    gl_FragColor = vec4(1. - log2(1. + time)/100., 1. * log2(1. + time), 0., 1. - log2(1. + time/2.)/log2(1. + 3.95));
+		}
+		
+	</script>
+</head>
+<body>
+<!-- https://github.com/Jam3/jam3-lesson-webgl-shader-threejs -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		
+
+
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes: ["position", "normal", "uv"],
+			uniforms: ["world", "worldView", "worldViewProjection", "view", "projection"],
+            needAlphaBlending: true
+	    });
+	
+		blendMaterial.backFaceCulling = false;		
+
+
+		// var sphere = BABYLON.MeshBuilder.CreateSphere("sphere", {diameter:10}, scene);
+
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		// !!!!!! 重要的事说三遍 重要的事说三遍 重要的事说三遍
+    	sphere.convertToFlatShadedMesh();	
+
+
+		sphere.material = blendMaterial;
+
+		var t = 0.;
+	    var time = 0.;
+	    scene.registerBeforeRender(function() {
+	        if(time<8) {
+	            sphere.material.setFloat("time", time);
+	            time +=0.01;
+	        }   
+	        else {
+	            sphere.dispose();
+	        }
+	    });
+
+
+
+		// sphere.pickable = true;
+		// scene.onPointerDown = function(evt, pickInfo){
+		// 	// console.log(pickInfo)
+		// 	if(pickInfo.hit) {
+		// 		var mesh = pickInfo.pickedMesh,
+		// 			point = pickInfo.pickedPoint;
+		// 		console.log(mesh, point);
+		// 		var positions = mesh.getFacetLocalPositions();
+  //   			var normals = mesh.getFacetLocalNormals();
+  //   			console.log(positions, normals);
+		// 		var indexes = mesh.getFacetsAtLocalCoordinates(point.x, point.y, point.z);
+		// 		if (indexes != null) {
+		// 		    var worldPos = mesh.getFacetPosition(indexes[0]);
+
+		// 		    console.log(worldPos)
+		// 		} else {
+		// 			console.log(indexes)
+		// 		}
+		// 	}
+		// }
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

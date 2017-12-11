@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision highp float;
+
+		// Attributes
+		attribute vec3 position;
+		attribute vec2 uv;
+
+		// Uniforms
+		uniform mat4 worldViewProjection;
+
+		// Varying
+		varying vec2 vUV;
+		varying vec4 vColor;
+		void main(void) {
+		    gl_Position = worldViewProjection * vec4(position, 1.0);
+
+		    vUV = uv;
+		    vColor = vec4(1.0, 0.0 ,0.0, 1.0);
+		}
+	</script>
+	<script type="application/fragmentShader" id="blend2FragmentShader">
+		precision highp float;
+
+		// Uniforms
+		uniform sampler2D baseSampler;
+		uniform float size;
+
+		// Varyings
+		varying vec2 vUV;
+
+		// Constants
+		const vec3 LUMA_COEFFICIENT = vec3(0.2126, 0.7152, 0.0722);
+
+		float lumaAtCoord(vec2 coord)
+		{
+			vec3 pixel = texture2D(baseSampler, coord).rgb;
+			float luma = dot(pixel, LUMA_COEFFICIENT);
+			return luma;
+		}
+
+		void main()
+		{
+			float lumaU0 = lumaAtCoord(vUV + vec2(-1.0,  0.0) / size);
+			float lumaU1 = lumaAtCoord(vUV + vec2( 1.0,  0.0) / size);
+			float lumaV0 = lumaAtCoord(vUV + vec2( 0.0, -1.0) / size);
+			float lumaV1 = lumaAtCoord(vUV + vec2( 0.0,  1.0) / size);
+
+			vec2 slope = (vec2(lumaU0 - lumaU1, lumaV0 - lumaV1) + 1.0) * 0.5;
+
+			gl_FragColor = vec4(slope, 1.0, 1.0);
+		}
+	</script>
+	<script type="application/fragmentShader" id="blend3FragmentShader">
+		//attributes from vertex shader
+		varying vec4 vColor;
+		varying vec2 vUV;
+		//our texture samplers
+		uniform sampler2D u_texture; //diffuse map
+		uniform sampler2D u_normals; //normal map
+		//values used for shading algorithm...
+		uniform vec2 Resolution;//resolution of screen
+		uniform vec3 LightPos; //light position, normalized
+		uniform vec4 LightColor;//light RGBA -- alpha is intensity
+		uniform vec4 AmbientColor;//ambient RGBA -- alpha is intensity 
+		uniform vec3 Falloff;//attenuation coefficients
+		void main() {
+			//RGBA of our diffuse color
+			vec4 DiffuseColor = texture2D(u_texture, vUV);
+			//RGB of our normal map
+			vec3 NormalMap = texture2D(u_normals, vUV).rgb;
+			//The delta position of light
+			vec3 LightDir = vec3(LightPos.xy - (gl_FragCoord.xy / Resolution.xy), LightPos.z);
+			//Correct for aspect ratio
+			LightDir.x *= Resolution.x / Resolution.y;
+			//Determine distance (used for attenuation) BEFORE we normalize our LightDir
+			float D = length(LightDir);
+			//normalize our vectors
+			vec3 N = normalize(NormalMap * 2.0 - 1.0);
+			vec3 L = normalize(LightDir);
+			//Pre-multiply light color with intensity
+			//Then perform "N dot L" to determine our diffuse term
+			vec3 Diffuse = (LightColor.rgb * LightColor.a) * max(dot(N, L), 0.0);
+			//pre-multiply ambient color with intensity
+			vec3 Ambient = AmbientColor.rgb * AmbientColor.a;
+			//calculate attenuation
+			float Attenuation = 1.0 / ( Falloff.x + (Falloff.y*D) + (Falloff.z*D*D) );
+			//the calculation which brings it all together
+			vec3 Intensity = Ambient + Diffuse * Attenuation;
+			vec3 FinalColor = DiffuseColor.rgb * Intensity;
+			gl_FragColor = vec4(FinalColor, DiffuseColor.a);
+		}	
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, true);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var point = new BABYLON.PointLight('', new BABYLON.Vector3(2, 2, 2), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+		// var sphere = BABYLON.Mesh.CreateGround('',10,10,2, scene);
+
+		var mat1 = new BABYLON.StandardMaterial('',scene);
+		sphere.material = mat1;
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		var width = engine.getRenderWidth(),
+			height = engine.getRenderHeight();
+
+
+		var blendMaterial2 = new BABYLON.ShaderMaterial("",scene,{ 
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blend2FragmentShader"
+	    },{
+	    	attributes:['position','normal','uv'],
+	    	uniforms:['worldViewProjection','baseSampler','size']
+	    });
+		var texture = new BABYLON.Texture('./images/crate.png',scene);
+		var NormalMapTex = new BABYLON.Texture('./images/normalMap.jpg',scene);
+
+	    blendMaterial2.setTexture('baseSampler',NormalMapTex);
+	    blendMaterial2.setFloat('size',3.2);
+
+
+
+	    var blendMaterial3 = new BABYLON.ShaderMaterial("",scene,{ 
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blend3FragmentShader"
+	    },{
+	    	attributes:['position','normal','uv'],
+	    	uniforms:['worldViewProjection','u_texture','u_normals', 'Resolution', 'LightPos','LightColor','AmbientColor','Falloff']
+	    });
+
+	    blendMaterial3.setTexture('u_normals', new BABYLON.Texture('./images/wall.normal.png',scene, true));
+	    blendMaterial3.setTexture('u_texture', new BABYLON.Texture('./images/wall.png',scene, true));
+
+	    blendMaterial3.setVector2('Resolution',new BABYLON.Vector2(width, height));
+	    blendMaterial3.setVector3('Falloff',new BABYLON.Vector3(0.4, 7.0, 40.0));
+	    blendMaterial3.setVector3('LightPos',new BABYLON.Vector3(0.5, 0.5, 0.075));
+	    blendMaterial3.setColor4('LightColor',new BABYLON.Color4(1.0, 1.0, 0.0, 1.0));
+	    blendMaterial3.setColor4('AmbientColor',new BABYLON.Color4(0.0, 0.0, 0.0, 0.2));
+
+
+	    sphere.lookAt(point.position);
+	    sphere.material = blendMaterial3;
+
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

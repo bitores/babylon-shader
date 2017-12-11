@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision highp float;
+
+		// Attributes
+		attribute vec3 position;
+		attribute vec3 normal;
+		attribute vec2 uv;
+
+		// Uniforms
+		uniform mat4 worldViewProjection;
+
+		// Varying
+		varying vec3 vPosition;
+		varying vec3 vNormal;
+		varying vec2 vUV;
+
+		void main(void) {
+		    vec4 outPosition = worldViewProjection * vec4(position, 1.0);
+		    gl_Position = outPosition;
+		    
+		    vUV = uv;
+		    vPosition = position;
+		    vNormal = normal;
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		precision highp float;
+
+		// Varying
+		varying vec3 vPosition;
+		varying vec3 vNormal;
+		varying vec2 vUV;
+
+		// Uniforms
+		uniform mat4 world;
+		uniform float yCut;
+
+		// Refs
+		uniform vec3 cameraPosition;
+
+
+		void main(void) {
+		    if( vPosition.y  > yCut )discard;
+		    
+		    vec3 vLightPosition = vec3(0,20,10);
+		    
+		    // World values
+		    vec3 vPositionW = vec3(world * vec4(vPosition, 1.0));
+		    vec3 vNormalW = normalize(vec3(world * vec4(vNormal, 0.0)));
+		    vec3 viewDirectionW = normalize(cameraPosition - vPositionW);
+		    
+		    // Light
+		    vec3 lightVectorW = normalize(vLightPosition - vPositionW);
+		    vec3 color = vec3(0.5, 0.2, 0.2);
+		    
+		    // diffuse
+		    float ndl = max(0., dot(vNormalW, lightVectorW));
+		    
+		    // Specular
+		    vec3 angleW = normalize(viewDirectionW + lightVectorW);
+		    float specComp = max(0., dot(vNormalW, angleW));
+		    specComp = pow(specComp, max(1., 64.)) * 2.;
+		    
+		    gl_FragColor = vec4(color * ndl + vec3(specComp), 1.);
+		}				
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:["position", "normal", "uv"],
+	    	uniforms:["world",
+			"worldView", 
+			"worldViewProjection",
+			"view", "viewOffset",
+			"tileSize", "time", "projection", "yCut"]
+	    });
+
+	    blendMaterial.setTexture('uTexture',new BABYLON.Texture('images/crate.png',scene));
+		sphere.material = blendMaterial;
+
+
+		var yCut = 0;
+        blendMaterial.setFloat('yCut', yCut);
+        blendMaterial.backFaceCulling = false;
+        sphere.material = blendMaterial;
+
+        var time = 0;
+        scene.registerBeforeRender(()=>{
+            time+=0.01;
+            yCut = (Math.sin(time)+1)*0.5;
+            blendMaterial.setFloat('yCut', yCut);
+
+        });
+        
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

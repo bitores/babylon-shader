@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.3.0.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<!-- https://stemkoski.github.io/Three.js/Shader-Glow.html -->
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision highp float;
+
+		// Attributes
+		attribute vec3 position;
+		attribute vec3 normal;
+		// attribute vec4 normalMatrix;
+		// attribute vec3 normalMatrix;
+		// Uniforms
+		uniform mat4 worldViewProjection;
+		uniform mat4 normalMatrix;
+		
+
+		uniform vec3 viewVector;
+		uniform float c;
+		uniform float p;
+
+		varying float intensity;
+
+		void main(void) {
+			vec3 vNormal = normalize( normalMatrix * vec4(normal,1.0)).xyz;
+			vec3 vNormel = normalize( normalMatrix * vec4(viewVector,1.0)).xyz;
+
+			// vec3 vNormal = normalize( normalMatrix * normal) ;
+			// vec3 vNormel = normalize( normalMatrix * viewVector );
+
+			intensity = pow( c - dot(vNormal, vNormel), p );
+
+		    gl_Position = worldViewProjection * vec4(position, 1.0);
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		precision highp float;
+
+		uniform vec3 glowColor;
+		varying float intensity;
+
+		void main(void) {
+		    vec3 glow = glowColor * intensity;
+    		gl_FragColor = vec4( glow, 1.0 );
+		}		
+	</script>
+
+	<!-- http://blog.csdn.net/a3070173/article/details/3220940 -->
+<!-- 
+
+Glow即辉光效果现在已成为3D图形中一个引人注目的特效.本文主要介绍如何使用GLSL实现一个典型的GLow效果.
+ 实现步骤:1.渲染整个场景到一个祯缓冲区中
+    2.将场景中需要进行GLow处理的物体绘制第二个FBO纹理A中
+    3.在FBO纹理A和B之间进行横和纵"高斯"过滤
+    4.将进行过GLow处理后的FBO纹理A与祯缓冲区中的场景图像以glBlendFunc(GL_ONE, GL_ONE)方式进行混合处理
+    
+ -->
+	<script type="application/fragmentShader" id="glowFragmentShader">
+		const int g_iFilterTime = 9; // 过滤次数
+		const float g_fGene = (1.0/(1.0 + 2.0*(0.93 + 0.8 + 0.7 + 0.6 + 0.5 + 0.4 + 0.3 + 0.2 + 0.1))); // 衰减因子
+		uniform sampler2D g_Decal;
+		uniform bool g_bFiterMode;
+		uniform float g_fGlowGene;
+		uniform vec2 g_vec2HorizontalDir; // 水平过滤方向
+		uniform vec2 g_vec2VerticalDir;  // 竖直过滤方向
+		uniform float g_fFilterOffset; // 过滤偏移
+
+		varying vec2 vUV;
+		void main(void) {
+		    float aryAttenuation[g_iFilterTime];
+			aryAttenuation[0] = 0.93;
+			aryAttenuation[1] = 0.8;
+			aryAttenuation[2] = 0.7;
+			aryAttenuation[3] = 0.6;
+			aryAttenuation[4] = 0.5;
+			aryAttenuation[5] = 0.4;
+			aryAttenuation[6] = 0.3;
+			aryAttenuation[7] = 0.2;
+			aryAttenuation[8] = 0.1;
+			// 采样原始颜色
+
+			vec4 vec4Color = texture2D(g_Decal, vUV)*g_fGene;
+			// 计算过滤方向
+			vec2 vec2FilterDir = g_vec2HorizontalDir + vec2(g_fFilterOffset, 0.0); // 水平过滤
+			if (!g_bFiterMode) {
+				vec2FilterDir = g_vec2VerticalDir + vec2(0.0, g_fFilterOffset); // 竖直过滤
+			}
+			// 进行过滤
+			vec2 vec2Step = vec2FilterDir;
+			for(int i = 0; i< g_iFilterTime; ++i) {
+				vec4Color += texture2D(g_Decal, vUV + vec2Step)*aryAttenuation[i]*g_fGene;
+				vec4Color += texture2D(g_Decal, vUV - vec2Step)*aryAttenuation[i]*g_fGene;
+				vec2Step += vec2FilterDir;
+			}
+			if (g_bFiterMode) {
+				gl_FragColor = vec4Color*g_fGlowGene;
+			} else {
+				gl_FragColor = vec4Color;
+			}
+		}		
+	</script>
+</head>
+<body>
+<!-- https://stemkoski.github.io/Three.js/Shader-Glow.html -->
+
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		
+		var sphere = BABYLON.Mesh.CreateSphere('',10,2, scene);
+
+		sphere.position.z +=5;
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		// blend
+		var glowMat = new BABYLON.ShaderMaterial("",scene,{ 
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:['position','normal'],
+	    	uniforms:['worldViewProjection','normalMatrix','viewVector','c','p','glowColor'],
+	    	needAlphaBlending: true
+	    });
+
+	    glowMat.setFloat('c',1.0);
+	    glowMat.setFloat('p',1.4);// 6.4 天眼
+
+	    glowMat.backFaceCulling = true;
+	    // glowMat.alpha = 0.1;
+	    glowMat.alphaMode = BABYLON.Engine.ALPHA_ADD;
+
+
+	    var tex = new BABYLON.Texture('images/cloud.png', scene);
+
+	    glowMat.setColor3('glowColor',new BABYLON.Color3(1,1,0));
+	    glowMat.setVector3('viewVector',camera.position);
+    
+	    
+
+	    // blendMaterial.setMatrix('normalMatrix',tex.getTextureMatrix());;//
+		// var glow = {};//sphere.clone("glow");
+
+		var glow = new BABYLON.Mesh("glow", scene, null, sphere);
+		glow.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+		// BABYLON.Tools.DeepCopy(sphere ,glow)
+		// var glow = BABYLON.Mesh.CreateSphere('',10,2, scene);
+		// glow.position = sphere.position.clone();
+		glow.scaling = new BABYLON.Vector3(2.2,2.2,2.2);
+		glow.material = glowMat;
+
+		var world = glow.getWorldMatrix();
+
+		scene.beforeRender = function(){
+			glowMat.setVector3('viewVector',camera.position.subtract(glow.position));
+			// console.log('.....');
+			// var view = scene.getViewMatrix();
+			view = camera.getViewMatrix();
+			if(view){
+				var mvMatrix = world.multiply(view); 
+      			glowMat.setMatrix('normalMatrix',tex.getTextureMatrix());//BABYLON.Matrix.Transpose(mvMatrix.invert())
+			}
+		}
+
+		var glowTexture = new BABYLON.ProceduralTexture("glowTex", 256, {
+			fragmentElement: 'glowFragmentShader'
+		}, scene);
+
+		// glowTexture.onApply = function(){
+			// console.log('*****');
+
+			glowTexture.setTexture('g_Decal', new BABYLON.Texture('images/crate.png',scene));
+			glowTexture.setFloat('g_bFiterMode', 1.0);
+			glowTexture.setVector2('g_vec2VerticalDir',new BABYLON.Vector2(1.0,1.0));
+			glowTexture.setVector2('g_vec2HorizontalDir',new BABYLON.Vector2(1.0,1.0));
+			glowTexture.setFloat('g_fGlowGene',0.5);
+			glowTexture.setFloat('g_fFilterOffset',0.7);
+
+		// }
+
+		// var glowMat2 = new BABYLON.ShaderMaterial("",scene,{ 
+	 //    	vertexElement: "glowVertexShader", 
+	 //    	fragmentElement: "glowFragmentShader"
+	 //    },{
+	 //    	attributes:['position','uv'],
+	 //    	uniforms:['worldViewProjection','g_Decal','g_bFiterMode','g_fGlowGene','g_vec2HorizontalDir','g_vec2VerticalDir','g_fFilterOffset']
+	 //    });
+
+		// glowMat2.setTexture('g_Decal', new BABYLON.Texture('images/crate.png',scene));
+		// glowMat2.setFloat('g_bFiterMode', 1.0);
+		// glowMat2.setVector2('g_vec2VerticalDir',new BABYLON.Vector2(2.0,2.0));
+		// glowMat2.setVector2('g_vec2HorizontalDir',new BABYLON.Vector2(2.0,2.0));
+		// glowMat2.setFloat('g_fGlowGene',0.9)
+		// glowMat2.setFloat('g_fFilterOffset',0.1)
+
+
+		// sphere.material = glowMat2;
+
+		sphere.material = new BABYLON.StandardMaterial('',scene);
+		sphere.material.diffuseTexture = glowTexture;
+
+		camera.zoomOn([glow]);
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

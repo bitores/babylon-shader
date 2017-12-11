@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>高斯模糊</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision highp float;
+		// Attributes
+		attribute vec3 position;
+		attribute vec2 uv;
+		// Uniforms
+		uniform mat4 worldViewProjection;
+
+		varying vec2 vUV;
+		void main(void) {
+		    gl_Position = worldViewProjection * vec4(position, 1.0);
+		    vUV = uv;
+		}
+
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		precision mediump float;
+
+		varying vec2 vUV;
+		uniform sampler2D uTexture;
+
+		vec2 blurSize;
+
+		void main(void) {
+
+// 高斯模糊是一种图像模糊滤波器，它用正态分布计算图像中每个像素的变换。N维空间正态分布方程为：但是在实际过程中，我们可以先对水平方向先做一次一维的模糊，再对垂直方向做一次一维模糊，同样可以达到使用二维矩阵变换得到的效果。
+// 
+
+			blurSize=vec2((1.0/1024.0)*3.0,(1.0/768.0)*3.0);
+			vec4 sum=vec4(0.0);
+			sum+=texture2D(uTexture,vUV-4.0*blurSize)*0.063327;
+			sum+=texture2D(uTexture,vUV-3.0*blurSize)*0.093095;
+			sum+=texture2D(uTexture,vUV-2.0*blurSize)*0.122589;
+			sum+=texture2D(uTexture,vUV-1.0*blurSize)*0.144599;
+			sum+=texture2D(uTexture,vUV)*0.152781;
+			sum+=texture2D(uTexture,vUV+1.0*blurSize)*0.144599;
+			sum+=texture2D(uTexture,vUV+2.0*blurSize)*0.122589;
+			sum+=texture2D(uTexture,vUV+3.0*blurSize)*0.093095;
+			sum+=texture2D(uTexture,vUV+4.0*blurSize)*0.063327;
+			gl_FragColor=sum;
+		}				
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:['worldViewProjection','uTexture']
+	    });
+
+	    blendMaterial.setTexture('uTexture',new BABYLON.Texture('images/crate.png',scene));
+		sphere.material = blendMaterial;
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

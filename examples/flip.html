@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<!-- <script type="text/javascript" src="pep.js"></script> -->
+	<script type="text/javascript" src="hand.minified-1.2.js"></script>
+	<script src="babylon.3.0.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision highp float;
+		precision highp int;
+
+		uniform mat4 worldViewProjection;
+		uniform mat4 textureMatrix;
+
+		attribute vec3 position;
+		attribute vec2 uv;
+
+		varying vec2 vTexCoord;
+
+		void main()
+		{
+			vec4 texCoord4 = textureMatrix * vec4(uv.x, uv.y, 0.0, 1.0);
+			vTexCoord = uv;
+			
+			gl_Position = worldViewProjection * vec4(position, 1.0);
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		precision highp float;
+		precision highp int;
+
+		#define PI 3.141592653589793
+		#define PIx2 6.283185307179586
+		#define SCALE 512.0
+		#define SHARPNESS 1.0
+		#define CYLINDER_RADIUS 0.159155 
+		// CYLINDER_RADIUS = 1.0 / (PI * 2.0)
+
+		uniform sampler2D upper_layer;		// upper layer
+		uniform sampler2D back_layer;		// back layer
+		uniform float isFlipping;
+		uniform float cos_angle; 
+		uniform float sin_angle; 
+		//uniform float angle; 
+		uniform float cylinderCenter;
+
+		varying vec2 vTexCoord;
+
+		//float MIN_AMOUNT = min_amount;//-0.707;//0.0; //-0.16;
+		//float MAX_AMOUNT = max_amount;//0.707;//1.0; //1.3;
+		//float cylinderCenter = time * (MAX_AMOUNT - MIN_AMOUNT) + MIN_AMOUNT;
+
+
+		float cylinderAngle;// = PIx2 * cylinderCenter;
+
+		vec4 upperLayerFragColor;
+		vec4 backLayerFragColor;
+
+		mat3 rotation;
+		mat3 rrotation;
+
+		vec3 hitPoint(float hitAngle, float yc, vec3 point) {
+		    float hitPoint = hitAngle / (PIx2);
+		    point.y = hitPoint - 0.25;
+		    return rrotation * point;
+		}
+
+
+		vec4 antiAlias(vec4 color1, vec4 color2, float distance) {
+		    distance *= SCALE;
+		    if (distance < 0.0) return color2;
+		    if (distance > 2.0) return color1;
+		    float dd = pow(1.0 - distance / 2.0, SHARPNESS);
+		    return ((color2 - color1) * dd) + color1;
+		}
+
+		float distanceToEdge(vec3 point) {
+		    //float dx = abs(point.x > 0.5 ? 1.0 - point.x : point.x);
+		    //float dy = abs(point.y > 0.5 ? 1.0 - point.y : point.y);
+			float dx = 100.0;	// infinite
+			float dy = 100.0;	// infinite
+		    if (point.x < 0.0) 
+			{
+				dx = -point.x;
+			}else if (point.x > 1.0){
+				dx = point.x - 1.0;
+			}
+		    if (point.y < 0.0)
+			{
+				dy = -point.y;
+			}else if (point.y > 1.0){
+				dy = point.y - 1.0;
+			}
+			
+		    if ((point.x < 0.0 || point.x > 1.0) && (point.y < 0.0 || point.y > 1.0)) 
+				return sqrt(dx * dx + dy * dy);
+				
+		    return min(dx, dy);
+		}
+
+		vec4 seeThrough(float yc) {
+			//return vec4(1.0, 0.0, 0.0, 1.0);
+		    float hitAngle = PI - (acos(yc / CYLINDER_RADIUS) - cylinderAngle);   
+		    vec3 point = hitPoint(hitAngle, yc, rotation * vec3(vTexCoord, 1.0));
+
+		    if (yc <= 0.0 && (point.x < 0.0 || point.y < 0.0 || point.x > 1.0 || point.y > 1.0)) 
+		        return backLayerFragColor;
+
+		    if (yc > 0.0) 
+		    	return upperLayerFragColor;
+				
+
+		    vec4 color = texture2D(upper_layer, point.xy);
+
+			// HERE I DISABLE SOME EFFECT TO IMPROVE EFFICIENCY
+		    //vec4 tcolor = vec4(0.0);
+		    //return antiAlias(color, tcolor, distanceToEdge(point));
+			
+			return color;
+		}
+
+
+		vec4 seeThroughWithShadow(float yc, vec3 point) {
+		    float shadow = distanceToEdge(point) * 30.0;
+		    shadow = (1.0 - shadow) / 3.0;
+		    if (shadow < 0.0) shadow = 0.0;
+		    else shadow *= cylinderCenter;
+
+		    vec4 shadowColor = seeThrough(yc);
+		    shadowColor.r -= shadow;
+		    shadowColor.g -= shadow;
+		    shadowColor.b -= shadow;
+		    return shadowColor;
+		    return vec4(0.0, 1.0, 0.0, 1.0);
+		}
+
+
+		vec4 backside(float yc, vec3 point) {
+		    vec4 color = texture2D(upper_layer, point.xy);
+		    float gray = (color.r + color.b + color.g) / 15.0;
+		    //gray += (8.0 / 10.0) * (pow(1.0 - abs(yc / CYLINDER_RADIUS), 2.0 / 10.0) / 2.0 + (5.0 / 10.0));
+			gray += 0.8 * (pow(1.0 - abs(yc / CYLINDER_RADIUS), 0.5) * 0.5 + 0.5);
+		    color.rgb = vec3(gray);
+			//color = 1.0 - color;
+		    return color;
+		}
+
+		vec4 behindSurface(float yc, vec3 point) {
+		    float shado = (1.0 - ((-CYLINDER_RADIUS - yc) / cylinderCenter * 7.0)) / 6.0;
+		    shado *= 1.0 - abs(point.x - 0.5);
+
+		    yc = (-CYLINDER_RADIUS - CYLINDER_RADIUS - yc);
+
+		    float hitAngle = (acos(yc / CYLINDER_RADIUS) + cylinderAngle) - PI;
+		    point = hitPoint(hitAngle, yc, point);
+
+		    if (yc < 0.0 && point.x >= 0.0 && point.y >= 0.0 && point.x <= 1.0 && point.y <= 1.0 && (hitAngle < PI || cylinderCenter > 0.5)){
+				shado = 1.0 - (sqrt(pow(abs(point.x - 0.5), 2.0) + pow(abs(point.y - 0.5), 2.0)) * 1.40845);
+		        shado *= pow(-yc / CYLINDER_RADIUS, 3.0) * 0.5;
+		    } else
+		        shado = 0.0;
+
+		    return vec4(backLayerFragColor.rgb - shado, 1.0);
+		}
+
+		void main(void) {
+			cylinderAngle = PIx2 * cylinderCenter;
+			upperLayerFragColor = texture2D(upper_layer, vTexCoord);
+			backLayerFragColor = texture2D(back_layer, vTexCoord);
+
+			if (isFlipping == 0.0)
+			{
+				gl_FragColor = upperLayerFragColor;
+				return;
+			}
+
+			/*
+		    float c = cos(-angle);
+		    float s = sin(-angle);
+			rotation = mat3(
+		        c, s, 0,
+		        -s, c, 0,
+		        0.0, 0.0, 1
+		    );
+			rrotation = mat3(
+		        c, -s, 0,
+		        s, c, 0,
+		        0.0, 0.0, 1
+		    );
+			*/
+			
+			rotation = mat3(
+		        cos_angle, sin_angle, 0,
+		        -sin_angle, cos_angle, 0,
+		        0.0, 0.0, 1
+		    );
+			rrotation = mat3(
+		        cos_angle, -sin_angle, 0,
+		        sin_angle, cos_angle, 0,
+		        0.0, 0.0, 1
+		    );
+			
+			
+			vec3 point = rotation * vec3(vTexCoord, 1.0);
+			//vec3 point = vec3(vTexCoord, 1.0);
+			//point.x = cos_angle*point.x+sin_angle*point.y;
+			//point.y = -sin_angle*point.x+cos_angle*point.y;
+		    float yc = point.y - cylinderCenter;
+		    
+
+			// ---- back layer ----
+			if (yc <= -CYLINDER_RADIUS) {
+		        // Behind surface
+		        gl_FragColor = behindSurface(yc, point);
+				//gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+		        return;
+		    }
+			
+		    // ---- upper layer ----
+		    if (yc >= CYLINDER_RADIUS) {	
+		        // Flat surface
+		        gl_FragColor = upperLayerFragColor;
+		        return;
+		    }
+
+			// ---- cylinder zone ----
+		    float hitAngle = (acos(yc / CYLINDER_RADIUS) + cylinderAngle) - PI;
+		    float hitAngleMod = mod(hitAngle, PIx2);
+		    point = hitPoint(hitAngle, yc, point);
+
+			
+			// ---- cylinder zone -- front side ----
+		    if (point.x < 0.0 || point.y < 0.0 || point.x > 1.0 || point.y > 1.0) {
+				// HERE I DISABLE SOME EFFECT TO IMPROVE EFFICIENCY
+		        //gl_FragColor = seeThroughWithShadow(yc, point);
+				
+		        gl_FragColor = seeThrough(yc);
+				//gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+		        return;
+		    }
+
+			
+			// ---- cylinder zone -- back side ----
+		    vec4 color = backside(yc, point);
+			
+			// HERE I DISABLE SOME EFFECT TO IMPROVE EFFICIENCY
+		    //vec4 otherColor;
+		    //if (yc < 0.0) {
+		    //    float shado = 1.0 - (sqrt(pow(point.x - 0.5, 2.0) + pow(point.y - 0.5, 2.0)) / 0.71);
+		    //    shado *= pow(-yc / CYLINDER_RADIUS, 3.0);
+		    //    shado *= 0.5;
+		    //    otherColor = vec4(0.0, 0.0, 0.0, shado);
+		    //} else {
+		    //    otherColor = upperLayerFragColor;
+		    //}
+		    //color = antiAlias(color, otherColor, CYLINDER_RADIUS - abs(yc));
+		    //vec4 cl = seeThroughWithShadow(yc, point, rotation, rrotation);
+		    //gl_FragColor = antiAlias(color, cl, distanceToEdge(point));
+		    
+		    
+		    gl_FragColor = color;
+		       
+		  
+		}
+				
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		// camera.setTarget(new BABYLON.Vector3.Zero());
+
+		// camera.attachControl(canvas, false);// 去掉，可以不用旋转 3d场景，但可以用 场景中事件
+		camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
+		camera.orthoLeft = -50;
+		camera.orthoRight = 50;
+		camera.orthoBottom = -50;
+		camera.orthoTop = 50;
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var plane = BABYLON.Mesh.CreateGround("ground1", 100, 100, 2, scene);//BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		// plane.backFaceCulling = false;
+		
+		plane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+		plane.rotate(BABYLON.Axis.X, Math.PI/2.0, BABYLON.Space.WORLD);
+
+
+		
+
+		var assetsManager = new BABYLON.AssetsManager(scene);
+
+		assetsManager.addTextureTask("images/sw1.jpg", "images/sw1.jpg");
+		assetsManager.addTextureTask("images/sw2.jpg", "images/sw2.jpg");
+		assetsManager.addTextureTask("images/sw3.jpg", "images/sw3.jpg");
+		assetsManager.addTextureTask("images/sw4.jpg", "images/sw4.jpg");
+
+		assetsManager.load();
+		
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:['worldViewProjection','textureMatrix','upper_layer','back_layer','isFlipping','cos_angle','sin_angle','cylinderCenter']
+	    });
+
+		blendMaterial.setFloat('isFlipping',0.0);
+		// blendMaterial.setFloat('cos_angle',Math.cos(0));// 左边角度
+		// blendMaterial.setFloat('sin_angle',Math.sin(0));// 右边角度
+		// blendMaterial.setFloat('cylinderCenter',0.0);// 中间角度
+	   
+		plane.material = blendMaterial;
+		plane.material.backFaceCulling = false;
+
+
+		var FLIP = {
+
+			progress: 0.0,
+
+			isFlipping: false,
+			startx: 0,
+			starty: 0,
+			endx: 0,
+			endy: 0,
+
+			// mode
+			FROM_NONE:-1,
+			FROM_BOTTOM: 0,
+			FROM_TOP: 1,
+			FROM_MIDDLE: 2,
+			FROM_BACK: 3,
+
+			flippingMode: this.FROM_NONE,
+
+			FAM_CANCEL: 0,
+			FAM_FLIPPING: 1,
+			flippingAniMode: this.FAM_CANCEL,
+
+			angle: 0,
+			timer: null,
+
+			animations: [],
+			pages: [],
+			current: 0
+		}
+
+		function setPage(num){
+			// FLIP.current = (num+1)>=FLIP.pages.length?0:num;
+			var up_page = num,
+				down_page = (num+1)>=FLIP.pages.length?0:(num+1);
+			console.log('current ',FLIP.current, 'setting',up_page, down_page);
+			// num;
+			blendMaterial.setTexture('upper_layer',FLIP.pages[up_page]);
+	    	blendMaterial.setTexture('back_layer',FLIP.pages[down_page]);
+		}
+
+		assetsManager.onFinish = () => {
+			// FLIP.pages = [
+			// new BABYLON.Texture('images/sw1.jpg',scene, true),
+			// new BABYLON.Texture('images/sw2.jpg',scene, true),
+			// new BABYLON.Texture('images/sw3.jpg',scene, true),
+			// new BABYLON.Texture('images/sw4.jpg',scene, true),
+			// ];
+
+			var sphere = BABYLON.Mesh.CreateSphere("sphere1", 16, 5, scene);
+			    // Move the sphere upward 1/2 its height
+			    sphere.position.y = 5;
+
+			var renderTexture1 = new BABYLON.RenderTargetTexture('render1', 512, scene);
+			renderTexture1.renderList.push(sphere);
+
+
+			var box = BABYLON.Mesh.CreateBox("box", 6, scene); 
+
+			var renderTexture2 = new BABYLON.RenderTargetTexture('render2', 512, scene);
+			renderTexture2.renderList.push(box);
+
+
+			FLIP.pages = [
+				new BABYLON.Texture('images/sw1.jpg',scene, true),
+				renderTexture1,
+				new BABYLON.Texture('images/sw3.jpg',scene, true),
+				renderTexture2,
+				new BABYLON.Texture('images/sw4.jpg',scene, true),
+			];
+
+
+			scene.registerBeforeRender(function() {
+				sphere.position.y = sphere.position.y > 50 ? -50 : sphere.position.y + 2;
+		        sphere.setEnabled(true);
+		        renderTexture1.render();
+				sphere.setEnabled(false);
+
+				box.rotation.x+=0.1;
+				box.rotation.y+=0.1;
+		        box.setEnabled(true);
+		        renderTexture2.render();
+		        box.setEnabled(false);
+
+		        
+		    });
+
+			setPage(FLIP.current);
+		}
+
+		
+
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		
+
+		var animationFlip = new BABYLON.Animation("animationFlip", "angle", 30, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
+		// var easingFunction = new BABYLON.CircleEase();
+
+		// // For each easing function, you can choose beetween EASEIN (default), EASEOUT, EASEINOUT
+		// easingFunction.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+
+		// // Adding the easing function to the animation
+		// animationFlip.setEasingFunction(easingFunction);
+		// FLIP.animations.push(animationFlip);
+
+		var width = window.innerWidth, //engine.getRenderWidth(),
+			height = window.innerHeight; //engine.getRenderHeight();
+
+		console.log(width, height);
+
+		scene.beforeRender = function(){
+			// console.log('.e..e.e..')
+			// blendMaterial.setFloat('isFlipping',1.0);
+			blendMaterial.setFloat('cos_angle',Math.cos(-FLIP.angle));// 左边角度
+			blendMaterial.setFloat('sin_angle',Math.sin(-FLIP.angle));// 右边角度
+			blendMaterial.setFloat('cylinderCenter',FLIP.progress);
+		}
+
+
+		if("ontouchstart" in window) {
+			canvas.addEventListener('touchstart',touch, false);  
+		    canvas.addEventListener('touchmove',touch, false);  
+		    canvas.addEventListener('touchend',touch, false); 
+		} else {
+			canvas.addEventListener('mousedown',touch, false);  
+		    canvas.addEventListener('mousemove',touch, false);  
+		    canvas.addEventListener('mousesup',touch, false);
+		}
+		 
+	      
+	    function touch (event){  
+	        var event = event || window.event;  
+	          
+	        // var oInp = document.getElementById("inp");  
+	  
+	        switch(event.type){  
+	        	case "mousedown":
+	        		onPointerDown(event.pageX, event.pageY)
+
+	        		break;
+	            case "touchstart":  
+	                // oInp.innerHTML = "Touch started (" +  + "," +  + ")"; 
+	                onPointerDown(event.touches[0].clientX, event.touches[0].clientY)
+
+	                break;  
+	            case "mouseup":
+	            	onPointerUp();
+	            	break;
+	            case "touchend":  
+	                // oInp.innerHTML = "<br/>Touch end (" + event.changedTouches[0].clientX + "," + event.changedTouches[0].clientY + ")";  event.changedTouches[0].clientX, event.changedTouches[0].clientY
+
+	                onPointerUp();
+	                break;  
+	            case "mousemove":
+	            	event.preventDefault();  
+	                
+	                // oInp.innerHTML = "<br/>Touch moved (" + event.touches[0].clientX + "," + event.touches[0].clientY + ")";  
+	                onPointerMove(event.pageX, event.pageY);
+
+	            	break;
+	            case "touchmove":  
+	                event.preventDefault();  
+	                
+	                // oInp.innerHTML = "<br/>Touch moved (" + event.touches[0].clientX + "," + event.touches[0].clientY + ")";  
+	                onPointerMove(event.touches[0].clientX, event.touches[0].clientY);
+
+	                break;  
+	        }  
+	          
+	    }  
+	
+		var onPointerDown = function(pointerX, pointerY) {
+			console.log('down...',pointerX, pointerY);
+			// 开始翻页
+			FLIP.isFlipping = true;
+			FLIP.flippingMode = FLIP.FROM_NONE;
+			// 开始位置
+			FLIP.startx = pointerX/width;
+			FLIP.starty = pointerY/height;
+			// 当前位置
+			FLIP.endx = pointerX/width;
+			FLIP.endy = pointerY/height;
+			console.log('down');
+			if(FLIP.timer){
+				clearInterval(FLIP.timer);
+				FLIP.timer = null;
+			}
+
+
+		}
+
+		var onPointerMove = function(pointerX, pointerY){
+			
+			if(false === FLIP.isFlipping) {
+				return;
+			}
+			console.log('move...',pointerX, pointerY)
+			if(FLIP.timer)clearInterval(FLIP.timer);
+			// 点所处的位置
+			FLIP.endx = pointerX/width;
+			FLIP.endy = pointerY/height;
+
+			
+
+			if(FLIP.flippingMode == FLIP.FROM_NONE) {
+				/** 设置 划动Mode start */
+
+				// 与 按下点 在 从 向左划    <--------
+				if(FLIP.endx < FLIP.startx) {
+
+					// 从下方 向左划
+					if(FLIP.endy > 0.55) {
+						FLIP.flippingMode = FLIP.FROM_BOTTOM;
+
+					// 从上方 向左划
+					} else if (FLIP.endy < 0.45) {
+						FLIP.flippingMode = FLIP.FROM_TOP;
+
+					// 从中间 向左划
+					} else {
+						FLIP.flippingMode = FLIP.FROM_MIDDLE;
+					}
+
+
+				// 与 按下点 在 从 向右划     --------->
+				} else if(FLIP.endx > FLIP.startx) {
+						// FM_BACK
+					// if(FLIP.endx <0.3) {
+					// 	FLIP.flippingMode = FLIP.FROM_BACK;
+					// } else {
+					// 	FLIP.flippingMode = FLIP.FROM_MIDDLE;
+					// }
+					
+					FLIP.flippingMode = FLIP.FROM_BACK;
+					// 换页
+					console.log('上一页')
+					var current = (FLIP.current-1)>=0?(FLIP.current-1):(FLIP.pages.length-1);
+					setPage(current);	
+				}
+
+				/** 设置 划动Mode end */
+			}
+			
+
+
+
+			if(FLIP.flippingMode == FLIP.FROM_BACK) {
+				if(FLIP.endx > FLIP.startx) {
+					FLIP.flippingAniMode = FLIP.FAM_FLIPPING;
+				} else {
+					this.flippingAniMode = FLIP.FAM_CANCEL;
+				}
+			} else {
+				if(FLIP.endx > FLIP.startx) {
+					FLIP.flippingAniMode = FLIP.FAM_CANCEL;
+				} else {
+					this.flippingAniMode = FLIP.FAM_FLIPPING;
+				}
+			}
+
+
+			// flipPage
+
+			console.log("*********", FLIP.endx, FLIP.endy);
+			if(FLIP.flippingMode == FLIP.FROM_BOTTOM) {
+				var fromx =  1.0,
+					fromy =  1.0;
+
+				var tan_angle = (fromx - FLIP.endx) /(fromy - FLIP.endy);
+				FLIP.angle = Math.atan(tan_angle);
+
+				FLIP.progress = -(tan_angle* FLIP.endx - fromx + FLIP.endy) / Math.sqrt(tan_angle * tan_angle + fromy);
+				if (FLIP.progress > 0.0) FLIP.progress = 0.0;
+
+			} else if(FLIP.flippingMode == FLIP.FROM_TOP) {
+
+				var fromx = 1.0,
+					fromy = 0.0;
+
+				var tan_angle = (fromx - FLIP.endx) /(fromy - FLIP.endy);
+				FLIP.angle = Math.atan(tan_angle) + Math.PI;
+
+				tan_angle = Math.tan(FLIP.angle);
+				
+
+				FLIP.progress = (tan_angle* FLIP.endx - 1.0 + FLIP.endy) / Math.sqrt(tan_angle * tan_angle + 1.0);
+				var val = Math.cos(FLIP.angle);
+				if (FLIP.progress > val) FLIP.progress = val;
+				// console.log(val);
+			} else {
+				FLIP.angle = Math.PI/2.0;
+				FLIP.progress = -FLIP.endx;
+			}
+
+			// console.log(FLIP.angle, FLIP.progress)
+			// var tan_angle = (FLIP.startx - FLIP.endx) /(FLIP.starty - FLIP.endy);
+			// FLIP.angle = Math.atan(tan_angle);
+
+			// console.log(FLIP.angle);
+
+			blendMaterial.setFloat('isFlipping',1.0);
+			// blendMaterial.setFloat('cos_angle',Math.cos(-FLIP.angle));// 左边角度
+			// blendMaterial.setFloat('sin_angle',Math.sin(-FLIP.angle));// 右边角度
+			// blendMaterial.setFloat('cylinderCenter',FLIP.progress);
+			// clearTimeout(FLIP.timer);
+			// FLIP.timer = setTimeout(function(){
+			// 	blendMaterial.setFloat('isFlipping',0.0);
+			// },1000)
+		}
+
+		var onPointerUp = function(){
+			console.log('up')
+
+
+			// 
+			FLIP.isFlipping = false;
+			// console.log(FLIP.angle, FLIP.progress)
+			clearInterval(FLIP.timer);
+
+			// if(FLIP.startx < 0.3) {
+			// 	FLIP.progress = 0.0;
+			// 	FLIP.angle = Math.PI / 2.0;
+			// } else if(FLIP.endy > 0.7) {
+			// 	FLIP.progress = -0.47;
+			// 	FLIP.angle = 0.74;
+			// } else if(FLIP.endy < 0.3) {
+			// 	FLIP.progress = -1.22;
+			// 	FLIP.angle = 2.19;
+			// } else if(FLIP.startx > 0.7) {
+			// 	FLIP.progress = -1.0;
+			// 	FLIP.angle = Math.PI / 2.0;
+			// }
+
+			if(FLIP.flippingMode == FLIP.FROM_BACK) {
+				FLIP.current = (FLIP.current-1)>=0?(FLIP.current-1):(FLIP.pages.length-1);
+				// FLIP.current = (FLIP.current-1)>=0?(FLIP.current-1):(--FLIP.current);
+				// setPage(FLIP.current);	
+				// blendMaterial.setFloat('isFlipping',0.0);
+				FLIP.timer = setInterval(function(){
+					FLIP.progress *= 1.28;
+					console.log(FLIP.progress);
+					if(Math.abs(FLIP.progress) > 1.0){
+						// FLIP.current = (FLIP.current-1)>=0?(FLIP.current-1):--FLIP.current;
+						// 	
+						// console.log();
+						blendMaterial.setFloat('isFlipping',0.0);
+						setPage(FLIP.current);
+						clearInterval(FLIP.timer);
+						FLIP.timer = null;
+					} else {
+						blendMaterial.setFloat('isFlipping',FLIP.progress);
+					}
+				},50);
+			} else {
+				// 向 左 划动
+				console.log('!!!!!!!----------');
+				FLIP.current = (FLIP.current+1)>=FLIP.pages.length?0:++FLIP.current;
+				// setPage(FLIP.current);	
+				// blendMaterial.setFloat('isFlipping',0.0);
+						
+				FLIP.timer = setInterval(function(){
+					FLIP.progress *= 0.28;
+					console.log(FLIP.progress);
+
+					if(Math.abs(FLIP.progress) < 0.0001){
+						// FLIP.current = (FLIP.current+1)>=FLIP.pages.length?0:++FLIP.current;
+						setPage(FLIP.current);	
+						blendMaterial.setFloat('isFlipping',0.0);
+						clearInterval(FLIP.timer);
+						FLIP.timer = null;
+					} else {
+						blendMaterial.setFloat('isFlipping',FLIP.progress);
+					}
+				},50);
+			}
+
+			
+			// var keysPlane = [];
+			// keysPlane.push({ frame: 0, value: 2 });
+			// keysPlane.push({ frame: 5020, value: 0.0 });
+			// animationFlip.setKeys(keysPlane);
+			// animationFlip.addEvent(new BABYLON.AnimationEvent(0, function(v){
+			// 	// blendMaterial.setFloat('isFlipping',1.0);
+			// }));
+			// scene.beginAnimation(FLIP, 0, 120, true);
+		}
+
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

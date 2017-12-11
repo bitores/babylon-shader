@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<!-- https://www.babylonjs-playground.com/#1FH5HJ#10 -->
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision mediump float;
+		attribute vec3 position;
+		attribute vec3 normal;
+		attribute vec2 uv;
+
+		uniform mat4 worldViewProjection;
+
+		varying vec4 vPosition;
+		varying vec3 vNormal;
+		void main(){
+			vec4 p = vec4(position,1.);
+			vPosition = p;
+			vNormal = normal;
+			gl_Position = worldViewProjection * p;
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		precision mediump float;
+		uniform mat4 worldView;
+		
+		uniform float offset;
+		uniform vec3 TopOrRightColor;
+		uniform vec3 BottomOrLeftColor;
+		uniform vec2 iResolution;
+
+		uniform float uDir; // 1 top-bottom 2 right-left
+
+		varying vec4 vPosition;
+		varying vec3 vNormal;
+		void main(void){
+
+			// 效果一 （用sphere）
+			// if(uDir==2.0){// right - left
+
+			// 	gl_FragColor = vec4(TopOrRightColor * (gl_FragCoord.x / iResolution.x), 1) + vec4(BottomOrLeftColor * (offset - (gl_FragCoord.x / iResolution.x)), 1);
+				
+			// } else {// top - bottom
+
+			// 	gl_FragColor = vec4(TopOrRightColor * (gl_FragCoord.y / iResolution.y), 1) + vec4(BottomOrLeftColor * (offset - (gl_FragCoord.y / iResolution.y)), 1);
+			// }
+
+			// 效果二 （用sphere）
+			// vec2 position = vec2(gl_FragCoord.xy / iResolution.xy);
+			// float dir = 0.0;
+			// if(uDir==2.0) {
+			// 	dir = position.x;
+			// } else {
+			// 	dir = position.y;
+			// }
+			
+			// gl_FragColor = vec4(mix(vec4(BottomOrLeftColor,1.0), vec4(TopOrRightColor, 1.0), dir));
+
+			// 效果三-  径向 渐变 （用sphere）
+			// vec2 position = ( gl_FragCoord.xy / iResolution.xy );
+	  //   	float distanceFromLight = length(position - vec2(0.5, 0.5));
+	  //   	gl_FragColor = mix(vec4(BottomOrLeftColor,1.0), vec4(TopOrRightColor, 1.0), distanceFromLight);
+
+
+	       // 另一种实现代码 （用box）
+	       // 用box 效果明显
+	       // float h = normalize(vPosition+offset).y;
+	       // gl_FragColor = vec4(mix(BottomOrLeftColor,TopOrRightColor,max(pow(max(h,0.0),0.6),0.0)),1.0);
+					
+		}				
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		
+
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		// blend
+		var skyGradient = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:['position','normal','uv'],
+	    	uniforms:['worldViewProjection','offset']
+	    });
+
+	 //    skyGradient.setFloat("offset", 1.0);
+		// skyGradient.setColor3("TopOrRightColor", BABYLON.Color3.FromInts(255,0,0));
+		// skyGradient.setColor3("BottomOrLeftColor", BABYLON.Color3.FromInts(0,0, 255));
+
+		skyGradient.setFloat("offset", 1.0);
+		skyGradient.setVector2("iResolution", new BABYLON.Vector2(window.innerWidth,window.innerHeight));
+	    skyGradient.setColor3("TopOrRightColor", BABYLON.Color3.FromInts(255,0,0));
+	    skyGradient.setColor3("BottomOrLeftColor", BABYLON.Color3.FromInts(0, 0, 255));
+	    skyGradient.setFloat("uDir", 2.0);
+
+		skyGradient.backFaceCulling = false;
+
+		// 用这个无效果
+		var sphere = BABYLON.Mesh.CreateSphere('',10.0, 1000.0, scene);
+		sphere.material = skyGradient;
+
+		// 这个有效果
+		// var options={width:3,height:3,depth:3};
+		// var mesh = BABYLON.MeshBuilder.CreateBox('box', options, scene);
+
+		// mesh.material = skyGradient;
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

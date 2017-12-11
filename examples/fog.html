@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		attribute vec3 position;   
+		attribute vec2 uv;
+
+		uniform mat4 world;                    
+		uniform mat4 view;                    
+		uniform mat4 viewProjection;          
+		varying float fFogDistance;
+		varying vec2 vUV;
+		void main(void) {
+	       vec4 worldPosition = world * vec4(position, 1.0);
+	       fFogDistance = (view * worldPosition).z;
+	       gl_Position =  viewProjection * worldPosition;
+	       vUV = uv;
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		#define FOGMODE_NONE 0.
+	    #define FOGMODE_EXP 1.
+	    #define FOGMODE_EXP2 2.
+	    #define FOGMODE_LINEAR 3.
+	    #define E 2.71828
+
+	    uniform vec4 vFogInfos;
+	    uniform vec3 vFogColor;
+
+	    uniform sampler2D texture;
+
+	    varying float fFogDistance;
+	    varying vec2 vUV;
+
+	    float CalcFogFactor()
+	    {
+	        float fogCoeff = 1.0;
+	        float fogStart = vFogInfos.y;
+	        float fogEnd = vFogInfos.z;
+	        float fogDensity = vFogInfos.w;
+
+	        if (FOGMODE_LINEAR == vFogInfos.x)
+	        {
+	            fogCoeff = (fogEnd - fFogDistance) / (fogEnd - fogStart);
+	        }
+	        else if (FOGMODE_EXP == vFogInfos.x)
+	        {
+	            fogCoeff = 1.0 / pow(E, fFogDistance * fogDensity);
+	        }
+	        else if (FOGMODE_EXP2 == vFogInfos.x)
+	        {
+	            fogCoeff = 1.0 / pow(E, fFogDistance * fFogDistance * fogDensity * fogDensity);
+	        }
+
+	        return clamp(fogCoeff, 0.0, 1.0);
+	    }
+
+	    void main(void) {               
+	        float fog = CalcFogFactor();
+
+	        // vec3 color = vec3(1.0, 0., 1.0);
+	        vec3 color = texture2D(texture , vUV).xyz;
+	        color = fog * color + (1.0 - fog) * vFogColor;                
+	        gl_FragColor = vec4(color, 1.); 
+	    }				
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		// 设置全局雾参数
+		scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
+	    scene.fogStart = 0;
+	    scene.fogEnd = 10;
+	    scene.fogColor = scene.clearColor;
+
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+
+
+		// blend
+		var fogMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:["world","view","viewProjection", "vFogInfos", "vFogColor","texture"]
+	    });
+
+
+		// 每体绑定雾材质
+		sphere.material = fogMaterial;
+
+		fogMaterial.setTexture('texture', new BABYLON.Texture('images/crate.png',scene));
+		// error 下面setFloat4报错
+		// fogMaterial.setFloat4("vFogInfos", scene.fogMode, scene.fogStart, scene.fogEnd, scene.fogDensity); 
+
+		fogMaterial.onBind = function(mesh){
+			var effect = fogMaterial.getEffect();
+			// 下面设置是正确的，在外面设置没有用
+	        effect.setFloat4("vFogInfos", scene.fogMode, scene.fogStart, scene.fogEnd, scene.fogDensity); 
+	        effect.setColor3("vFogColor", scene.fogColor);
+	        // effect.setTexture('texture', new BABYLON.Texture('./custom/crate.png',scene));// 这样会不起作用
+		}
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

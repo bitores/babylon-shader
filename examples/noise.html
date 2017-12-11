@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.3.0.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision highp float;
+		// Attributes
+		attribute vec3 position;
+		attribute vec2 uv;
+		// Uniforms
+		uniform mat4 worldViewProjection;
+
+		varying vec2 vUV;
+		void main(void) {
+		    gl_Position = worldViewProjection * vec4(position, 1.0);
+		    vUV = uv;
+		}
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		uniform sampler2D baseTexture;
+		uniform float baseSpeed;
+		uniform sampler2D noiseTexture;
+		uniform float noiseScale;
+		uniform float alpha;
+		uniform float time;
+
+		varying vec2 vUV;
+		void main() 
+		{
+			vec2 uvTimeShift = vUV + vec2( -0.7, 1.5 ) * time * baseSpeed;	
+			vec4 noiseGeneratorTimeShift = texture2D( noiseTexture, uvTimeShift );
+			vec2 uvNoiseTimeShift = vUV + noiseScale * vec2( noiseGeneratorTimeShift.r, noiseGeneratorTimeShift.b );
+			vec4 baseColor = texture2D( baseTexture, uvNoiseTimeShift );
+
+			baseColor.a = alpha;
+			gl_FragColor = baseColor;
+		}  		
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		var sphere2 = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		sphere2.position.z += 5;
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:['worldViewProjection','baseTexture','baseSpeed','noiseTexture','noiseScale','alpha','time']
+	    });
+
+	    blendMaterial.setFloat('baseSpeed',0.05);
+	    blendMaterial.setFloat('noiseScale',0.5337);
+	    blendMaterial.setFloat('alpha',1.0);
+	    blendMaterial.setFloat('time',1.0);
+
+	    blendMaterial.setTexture('baseTexture',new BABYLON.Texture('images/lava.jpg',scene,true));
+	    blendMaterial.setTexture('noiseTexture',new BABYLON.Texture('images/cloud.png',scene,true));
+		
+		sphere.material = blendMaterial;
+
+
+		var blendMaterial2 = blendMaterial.clone();
+
+		blendMaterial2.setTexture('baseTexture',new BABYLON.Texture('images/water.jpg',scene,true));
+		sphere2.material = blendMaterial2;
+
+
+		sphere.pickable = true;
+		var delta = 1.0;
+		scene.beforeRender = function(){
+			delta += (engine.deltaTime * 0.001);
+			blendMaterial.setFloat('time',delta);
+		}
+
+		// sphere.onBeforeRenderObservable.add(function(){
+		// 	blendMaterial.setTexture('baseTexture',new BABYLON.Texture('images/lava.jpg',scene,true));
+		// })
+
+		// sphere2.onBeforeRenderObservable.add(function(){
+		// 	blendMaterial.setTexture('baseTexture',new BABYLON.Texture('images/water.jpg',scene,true));
+		// })
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>
