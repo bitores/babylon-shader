@@ -90,12 +90,43 @@ Fragment Shader是逐像素执行，所以会尽量控制计算的复杂度。�
 
 - `ShaderMaterial(name, scene, option)`, 
 - `option`, 
-- `常用变量。。。world,worldViewProjection, on";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6"`, 
+- `常用变量。。。world,worldViewProjection, `, 
 
+```
+options{
+	needAlphaBlending:false,
+	needAlphaTesting:false,
+	attributes:["position", "normal", "uv"],
+	uniforms:["worldViewProjection"],
+	samplers:[],
+	defines:[]
+}
+```
 
+```
+attributes:"postion";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6"
+```
 
+```
+uniforms:world,worldView,worldViewProjection,view,projection,viewProjection
+```
 
-
+```
+Method:
+setTexture
+setTextureArray
+setFloat
+setFloats
+setColor3
+setColor4
+setVector2
+setVector3
+setVector4
+setMatrix
+setMatrix2x2
+setMatrix3x3
+setArray3
+```
 
 
 #### webgl Shader 事例截图
