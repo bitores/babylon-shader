@@ -33,12 +33,12 @@ void main() {
 
 - `void` 和C语言的void一样，无类型
 - `bool` 布尔
-- `int` 有符号的int
+- `int` 有符号的int
 - `float` 浮点数
 - `vec2`, `vec3`, `vec4` 2，3，4维向量，如果你不知道什么是向量，可以理解为2，3，4长度的数组。
 - `bvec2`, `bvec3`, `bvec4` 2，3，4维布尔值的向量。
 - `ivec2`, `ivec3`, `ivec4` 2，3，4维int值的向量。
-- `mat2`, `mat3`, `mat4` 2x2, 3x3, 4x4 浮点数的矩阵，如果你不了解矩阵，后面会有一篇文章单独介绍矩阵。
+- `mat2`, `mat3`, `mat4` 2x2, 3x3, 4x4 浮点数的矩阵，如果你不了解矩阵，后面会有一篇文章单独介绍矩阵。
 - `sampler2D` 纹理，后面会详细介绍。
 - `samplerCube` Cube纹理，后面会详细介绍
 
@@ -88,9 +88,74 @@ Fragment Shader是逐像素执行，所以会尽量控制计算的复杂度。�
 
 #### BabylonJS Shader 中shader 写法实践ABC
 
-- `ShaderMaterial(name, scene, option)`, 
+![](screenshots/shade3.jpg)
+
+
+
+**shaderMaterial 类的基本结构**
+
+
+- `ShaderMaterial(name, scene,shaderPath, option)`, 
 - `option`, 
 - `常用变量。。。world,worldViewProjection, `, 
+
+**shaderMaterial 加载 shader code**
+方法一：
+```
+shaderPath {
+  	vertexElement:'vertexNodeID',
+  	fragmentElement:'fragmentNodeID'
+}
+for
+<script type="application/vertexShader" id="vertexNodeID"> ... </script>
+<script type="application/fragmentShader" id="fragmentNodeID"> ... </script>
+```
+
+方法二：
+```
+shaderPath {
+  	vertex:'xxxx',
+  	fragment:'yyyy'
+}
+for
+BABYLON.Effect.ShadersStore["xxxxVertexShader"]
+BABYLON.Effect.ShadersStore["yyyyFragmentShader"]
+```
+
+**CustomProceduralTexture 基本结构**
+```
+BABYLON.CustomProceduralTexture(name, texturePath, siz, 1024, scene);
+```
+
+```
+BABYLON.Engine.ShadersRepository="dir1/dir2/custom";
+BABYLON.CustomProceduralTexture(name, "customxx", 1024, scene);
+for
+
+
+#dir1/dir2/custom
+customxx.fragment.fx
+customxx.vertex.fx
+config.json
+{
+	"animation": false,
+	"refreshrate":0,
+	"uniforms":[
+		{
+			"type":"float",
+			"name":"dirAmplifier",
+			"value":"6.0"
+		}
+	],
+	"sampler2Ds":[
+		{
+			"sampler2Dname":"dirt",
+			"textureRelativeUrl":"../images/crate.png"
+		}
+	]
+}
+```
+
 
 ```
 options{
