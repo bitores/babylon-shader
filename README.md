@@ -1,5 +1,7 @@
 # babylon-shader
 
+![](screenshots/webgl.png)
+
 #### webgl Shader 混个脸熟
 
 
@@ -29,18 +31,46 @@ void main() {
 }
 ```
 
+
+
+数据流
+
+![](screenshots/webgl_graphics_pipeline.jpg)
+
 #### webgl Shader 变量
 
 - `void` 和C语言的void一样，无类型
+
 - `bool` 布尔
+
 - `int` 有符号的int
+
 - `float` 浮点数
+
 - `vec2`, `vec3`, `vec4` 2，3，4维向量，如果你不知道什么是向量，可以理解为2，3，4长度的数组。
+
 - `bvec2`, `bvec3`, `bvec4` 2，3，4维布尔值的向量。
+
 - `ivec2`, `ivec3`, `ivec4` 2，3，4维int值的向量。
+
 - `mat2`, `mat3`, `mat4` 2x2, 3x3, 4x4 浮点数的矩阵，如果你不了解矩阵，后面会有一篇文章单独介绍矩阵。
+
 - `sampler2D` 纹理，后面会详细介绍。
+
 - `samplerCube` Cube纹理，后面会详细介绍
+
+  | S.No. | Type                | Description                          |
+  | ----- | ------------------- | ------------------------------------ |
+  | 1     | void                | 代表一个空值                               |
+  | 2     | bool                | Accepts true or false.               |
+  | 3     | int                 | This is a signed integer data type.  |
+  | 4     | float               | This is a floating scalar data type. |
+  | 5     | vec2, vec3, vec4    | n-component floating point vector    |
+  | 6     | bvec2, bvec3, bvec4 | Boolean vector                       |
+  | 7     | ivec2, ivec3, ivec4 | signed integer vector                |
+  | 8     | mat2, mat3, mat4    | 2x2, 3x3, 4x4 float matrix           |
+  | 9     | sampler2D           | Access a 2D texture                  |
+  | 10    | samplerCube         | Access cube mapped texture           |
 
 其它变量：
 
@@ -54,7 +84,11 @@ void main() {
 >
 > Fragment Shader 片元着色器 可以接受 除了 attribute 之外的 所有变量，每人像素都会触发调
 
-
+| S.No. | Qualifier     | Description                              |
+| ----- | ------------- | ---------------------------------------- |
+| 1     | **attribute** | This qualifier acts as a link between a vertex shader and OpenGL ES for per-vertex data. The value of this attribute changes for every execution of the vertex shader. |
+| 2     | **uniform**   | This qualifier links shader programs and the WebGL application. Unlike attribute qualifier, the values of uniforms do not change. Uniforms are read-only; you can use them with any basic data types, to declare a variable.**Example** − uniform **vec4** lightPosition; |
+| 3     | **varying**   | This qualifier forms a link between a vertex shader and fragment shader for interpolated data. It can be used with the following data types − float, vec2, vec3, vec4, mat2, mat3, mat4, or arrays.**Example** − varying **vec3** normal; |
 
 #### webgl Shader 变量精度
 
@@ -64,7 +98,24 @@ void main() {
 
 Fragment Shader是逐像素执行，所以会尽量控制计算的复杂度。对于不需要过高精度的变量，可以手动指定精度从而提高性能。如果你想所有的float都是高精度的，可以在Shader顶部声明`precision highp float;`，这样你就不需要为每一个变量声明精度了。
 
+### Predefined Variables
 
+OpenGL ES SL provides the following predefined **variables for vertex shader** −
+
+| S.No. | Variables                        | Description                              |
+| ----- | -------------------------------- | ---------------------------------------- |
+| 1     | highp vec4 gl_Position;          | Holds the position of the vertex.        |
+| 2     | mediump float      gl_PointSize; | Holds the transformed point size. The units for this variable are pixels. |
+
+OpenGL ES SL provides the following predefined **variables for fragment shader** −
+
+| S.No. | Variables                      | Description                              |
+| ----- | ------------------------------ | ---------------------------------------- |
+| 1     | mediump vec4 **gl_FragCoord**; | Holds the fragment position within the frame buffer. |
+| 2     | bool gl_FrontFacing;           | Holds the fragment that belongs to a front-facing primitive. |
+| 3     | mediump vec2 gl_PointCoord;    | Holds the fragment position within a point (point rasterization only). |
+| 4     | mediump vec4 gl_FragColor;     | Holds the output fragment color value of the shader |
+| 5     | mediump vec4 gl_FragData[n]    | Holds the fragment color for color attachment **n**. |
 
 #### webgl Shader 变量分量
 
@@ -195,3 +246,10 @@ config.json
 
 ![](screenshots/earthring.png)
 
+
+
+
+
+【参考】
+
+https://www.tutorialspoint.com/webgl/webgl_quick_guide.htm  WebGL 教程
