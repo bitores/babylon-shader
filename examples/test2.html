@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<script src="babylon.3.0.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision highp float;
+		// Attributes
+		attribute vec3 position;
+		attribute vec2 uv;
+		// Uniforms
+		uniform mat4 worldViewProjection;
+
+		varying vec2 vTextureCoord;
+		void main(void) {
+		    gl_Position = worldViewProjection * vec4(position.xy, 0.0, 1.0);
+		    vTextureCoord = uv;
+		}
+
+	</script>
+	<script type="application/fragmentShader" id="blendFragmentShader">
+		
+		precision highp float;
+		
+		uniform sampler2D uSampler;
+		uniform sampler2D displacementMap;
+		uniform sampler2D displacementMap2;
+
+		uniform float time;
+		uniform float elapsed;
+		uniform float width;
+		uniform vec2 resolution;
+		uniform float scale;
+
+		varying vec2 vTextureCoord;
+
+		float snoise(vec2 co, float seed) {
+			return fract(sin(dot(co * seed, vec2(12.9898, 78.233))) * 43758.5453);
+		}
+
+		void main() {
+			vec2 repeat = vec2(scale, scale * resolution.y / resolution.x);
+			vec2 uv = gl_FragCoord.xy / vec2(resolution.x, resolution.y);
+			vec2 vCoord = fract(uv.xy * repeat.xy);
+			vec4 displacement1 = texture2D( displacementMap, vCoord);
+			vec4 displacement2 = texture2D( displacementMap2, vCoord);
+			vec4 displacement = mix(displacement1, displacement2, vec4(time));
+			vec2 mixTexture = mix(displacement.xy, vTextureCoord.xy, vec2(time));
+			vec2 testPos1 = mixTexture + (1.0 - time) * displacement.xy * 0.5;
+			vec2 testPos = mix(testPos1, vec2(1.0), vec2(1.0 - time));
+			vec2 distUv = vec2(testPos.x,vTextureCoord.y);
+			float noise = snoise(distUv, elapsed);
+			vec4 color = texture2D(uSampler, distUv);
+			gl_FragColor = vec4(mix(color, vec4(vec3(color * noise), 0.0), 0.18));
+		}		
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var sphere = BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		var mat1 = new BABYLON.StandardMaterial('',scene);
+		sphere.material = mat1;
+
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+		// blend
+		var blendMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blendFragmentShader"
+	    },{
+	    	attributes:['position'],
+	    	uniforms:['worldViewProjection']
+	    });
+
+
+
+
+	    blendMaterial.setTexture("uSampler",new BABYLON.Texture("./images/mask.png",scene));
+	    blendMaterial.setTexture("displacementMap",new BABYLON.Texture("./images/rain/weather/texture-rain-bg.png",scene));
+	    blendMaterial.setTexture("displacementMap2",new BABYLON.Texture("./images/rain/weather/texture-rain-fg.png",scene));
+
+	    
+
+	    blendMaterial.setVector2("resolution",new BABYLON.Vector2(canvas.width, canvas.height));
+
+	    var time = 1;
+	    var elapsed = 1;
+	    scene.beforRender = function(){
+	    	blendMaterial.setFloat("time",time);
+	    	elapsed+=0.01;
+		    blendMaterial.setFloat("elapsed",elapsed);
+		    blendMaterial.setFloat("width", time++);
+		    blendMaterial.setFloat("scale", 1.0);
+	    }
+		
+		sphere.material = blendMaterial;
+
+		sphere.pickable = true;
+		scene.onPointerDown = function(evt, pickInfo){
+			// console.log(pickInfo)
+			if(pickInfo.hit) {
+				var mesh = pickInfo.pickedMesh,
+					point = pickInfo.pickedPoint;
+				console.log(mesh, point);
+				var positions = mesh.getFacetLocalPositions();
+    			var normals = mesh.getFacetLocalNormals();
+    			console.log(positions, normals);
+				var indexes = mesh.getFacetsAtLocalCoordinates(point.x, point.y, point.z);
+				if (indexes != null) {
+				    var worldPos = mesh.getFacetPosition(indexes[0]);
+
+				    console.log(worldPos)
+				} else {
+					console.log(indexes)
+				}
+			}
+		}
+	</script>
+</body>
+</html>

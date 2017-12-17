@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<!-- http://www.cake23.de/traveling-wavefronts-lit-up.html -->
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+
+		uniform mat4 worldViewProjection;
+		uniform mat4 textureMatrix;
+
+		attribute vec3 position;
+		attribute vec2 uv;
+
+		varying vec2 pixel;
+		void main()
+		{
+			// vTexCoord = (textureMatrix * vec4(uv.x, uv.y, 0.0, 1.0)).xy;
+			pixel = vec4(uv.x, uv.y, 0.0, 1.0).xy;
+			
+			gl_Position = worldViewProjection * vec4(position, 1.0);
+		}
+	</script>
+	<script type="application/fragmentShader" id="blurHorizontalFragmentShader">
+
+		#ifdef GL_ES
+		precision highp float;
+		#endif
+		// original shader from http://www.gamerendering.com/2008/10/11/gaussian-blur-filter-shader/
+		// horizontal blur fragment shader
+		uniform sampler2D src_tex;
+		varying vec2 pixel;
+		uniform vec2 pixelSize;
+		void main(void) // fragment
+		{
+			float h = pixelSize.x;
+			vec4 sum = vec4(0.0);
+			sum += texture2D(src_tex, vec2(pixel.x - 4.0*h, pixel.y) ) * 0.05;
+			sum += texture2D(src_tex, vec2(pixel.x - 3.0*h, pixel.y) ) * 0.09;
+			sum += texture2D(src_tex, vec2(pixel.x - 2.0*h, pixel.y) ) * 0.12;
+			sum += texture2D(src_tex, vec2(pixel.x - 1.0*h, pixel.y) ) * 0.15;
+			sum += texture2D(src_tex, vec2(pixel.x + 0.0*h, pixel.y) ) * 0.16;
+			sum += texture2D(src_tex, vec2(pixel.x + 1.0*h, pixel.y) ) * 0.15;
+			sum += texture2D(src_tex, vec2(pixel.x + 2.0*h, pixel.y) ) * 0.12;
+			sum += texture2D(src_tex, vec2(pixel.x + 3.0*h, pixel.y) ) * 0.09;
+			sum += texture2D(src_tex, vec2(pixel.x + 4.0*h, pixel.y) ) * 0.05;
+		    gl_FragColor.xyz = sum.xyz/0.98; // normalize
+			gl_FragColor.a = 1.;
+		} 
+						
+	</script>
+
+	<script type="application/fragmentShader" id="blurVerticalFragmentShader">
+		#ifdef GL_ES
+		precision highp float;
+		#endif
+		// original shader from http://www.gamerendering.com/2008/10/11/gaussian-blur-filter-shader/
+		// vertical blur fragment shader
+		uniform sampler2D src_tex;
+		varying vec2 pixel;
+		uniform vec2 pixelSize;
+		void main(void) // fragment
+		{
+			float v = pixelSize.y;
+			vec4 sum = vec4(0.0);
+			sum += texture2D(src_tex, vec2(pixel.x, - 4.0*v + pixel.y) ) * 0.05;
+			sum += texture2D(src_tex, vec2(pixel.x, - 3.0*v + pixel.y) ) * 0.09;
+			sum += texture2D(src_tex, vec2(pixel.x, - 2.0*v + pixel.y) ) * 0.12;
+			sum += texture2D(src_tex, vec2(pixel.x, - 1.0*v + pixel.y) ) * 0.15;
+			sum += texture2D(src_tex, vec2(pixel.x, + 0.0*v + pixel.y) ) * 0.16;
+			sum += texture2D(src_tex, vec2(pixel.x, + 1.0*v + pixel.y) ) * 0.15;
+			sum += texture2D(src_tex, vec2(pixel.x, + 2.0*v + pixel.y) ) * 0.12;
+			sum += texture2D(src_tex, vec2(pixel.x, + 3.0*v + pixel.y) ) * 0.09;
+			sum += texture2D(src_tex, vec2(pixel.x, + 4.0*v + pixel.y) ) * 0.05;
+		    gl_FragColor.xyz = sum.xyz/0.98;
+			gl_FragColor.a = 1.;
+		}
+	</script>
+
+	<script type="application/fragmentShader" id="advanceFragmentShader">
+		#ifdef GL_ES
+		precision highp float;
+		#endif
+
+			uniform sampler2D sampler_prev;
+			uniform sampler2D sampler_prev_n;
+			uniform sampler2D sampler_blur;
+			uniform sampler2D sampler_noise;
+			uniform sampler2D sampler_noise_n;
+
+			varying vec2 pixel;
+			uniform vec2 pixelSize;
+			uniform vec4 rnd;
+			uniform vec2 mouse;
+			uniform float time;
+			uniform float fps;
+
+		void main(void) {
+			// grabbing the blurred gradients
+			vec2 d = pixelSize*4.;
+			vec4 dx = (texture2D(sampler_blur, pixel + vec2(1,0)*d) - texture2D(sampler_blur, pixel - vec2(1,0)*d))*0.5;
+			vec4 dy = (texture2D(sampler_blur, pixel + vec2(0,1)*d) - texture2D(sampler_blur, pixel - vec2(0,1)*d))*0.5;
+			
+			vec2 zoom_in = pixel + vec2(dx.x,dy.x)*pixelSize*8.; // adding the traveling wave front
+			vec2 rand_noise = texture2D(sampler_noise, zoom_in + vec2(rnd.x, rnd.y)).xy;
+			gl_FragColor.x = texture2D(sampler_prev, zoom_in).x + (rand_noise.x-0.5)*0.0025 - 0.002; // decay with error diffusion
+			gl_FragColor.x -= (texture2D(sampler_blur, zoom_in + (rand_noise-0.5)*pixelSize).x -
+							  texture2D(sampler_prev, zoom_in + (rand_noise-0.5)*pixelSize)).x*0.047; // reaction-diffusion
+
+			gl_FragColor.a = 1.;
+		}
+	</script>
+
+	<script type="application/fragmentShader" id="compositeFragmentShader">
+		#ifdef GL_ES
+		precision highp float;
+		#endif
+
+			uniform sampler2D sampler_prev;
+			uniform sampler2D sampler_prev_n;
+			uniform sampler2D sampler_blur;
+			uniform sampler2D sampler_noise;
+			uniform sampler2D sampler_noise_n;
+
+			varying vec2 pixel;
+			uniform vec2 pixelSize;
+			uniform vec2 aspect;
+			uniform vec4 rnd;
+			uniform vec2 mouse;
+			uniform float time;
+
+		void main(void) {
+
+			vec2 lightSize=vec2(4.);
+
+			// grabbing the blurred gradients
+			vec2 d = pixelSize*2.;
+			vec4 dx = (texture2D(sampler_blur, pixel + vec2(1,0)*d) - texture2D(sampler_blur, pixel - vec2(1,0)*d))*0.5;
+			vec4 dy = (texture2D(sampler_blur, pixel + vec2(0,1)*d) - texture2D(sampler_blur, pixel - vec2(0,1)*d))*0.5;
+
+			// adding the pixel gradients
+			d = pixelSize*1.;
+			dx += texture2D(sampler_prev, pixel + vec2(1,0)*d) - texture2D(sampler_prev, pixel - vec2(1,0)*d);
+			dy += texture2D(sampler_prev, pixel + vec2(0,1)*d) - texture2D(sampler_prev, pixel - vec2(0,1)*d);
+
+			vec2 displacement = vec2(dx.x,dy.x)*lightSize; // using only the red gradient as displacement vector
+			float light = pow(max(1.-distance(0.5+(pixel-0.5)*aspect*lightSize + displacement,0.5+(mouse-0.5)*aspect*lightSize),0.),4.);
+		//	vec4 rd = 0.85-(1.-texture2D(sampler_prev,pixel-vec2(dx.x,dy.x)*pixelSize*2.5).x) + light*0.18;
+			//rd = mix(rd, 1., light*(1.-texture2D(sampler_blur,pixel-vec2(dx.x,dy.x)*pixelSize*4.)).x); 
+
+			// recoloring the lit up red channel
+			vec4 rd = vec4(texture2D(sampler_prev,pixel+vec2(dx.x,dy.x)*pixelSize*8.).x)*vec4(0.7,1.5,2.0,1.0)-vec4(0.3,1.0,1.0,1.0);
+			gl_FragColor = mix(rd,vec4(8.0,6.,2.,1.), light*0.75*vec4(1.-texture2D(sampler_prev,pixel+vec2(dx.x,dy.x)*pixelSize*8.).x)); 
+			
+			//gl_FragColor = texture2D(sampler_prev, pixel); // bypass
+			gl_FragColor.a = 1.;
+		}
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		camera.setTarget(new BABYLON.Vector3.Zero());
+
+		camera.attachControl(canvas, false);
+		scene.activeCamera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		
+
+		// sphere.backFaceCulling = false;
+		camera.orthoLeft = -50;
+		camera.orthoRight = 50;
+		camera.orthoBottom = -50;
+		camera.orthoTop = 50;
+
+
+		var sphere = BABYLON.Mesh.CreateGround("ground1", 100, 100, 2, scene);//BABYLON.Mesh.CreateSphere('',16,2, scene);
+		sphere.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+		sphere.rotate(BABYLON.Axis.X,Math.PI/2.0,BABYLON.Space.WORLD);
+
+
+		
+
+		
+		var assetsManager = new BABYLON.AssetsManager(scene);
+
+		assetsManager.addTextureTask("images/sw1.jpg", "images/sw1.jpg");
+		assetsManager.addTextureTask("images/sw2.jpg", "images/sw2.jpg");
+		assetsManager.addTextureTask("images/sw3.jpg", "images/sw3.jpg");
+		assetsManager.addTextureTask("images/sw4.jpg", "images/sw4.jpg");
+		assetsManager.addTextureTask("images/s1.jpg", "images/s1.jpg");
+		assetsManager.addTextureTask("images/s2.png", "images/s2.png");
+		assetsManager.addTextureTask("images/s3.png", "images/s3.png");
+		assetsManager.addTextureTask("images/s4.png", "images/s4.png");
+
+
+		assetsManager.load();
+		
+		// blend
+		var advanceMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "advanceFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:['worldViewProjection']
+	    });
+
+	    advanceMaterial.setFloat("fps",52);
+	    advanceMaterial.setFloat("time",0.01);
+	    advanceMaterial.setFloat("aspect",52);
+	    advanceMaterial.setFloat("rnd",52);
+	    advanceMaterial.setFloat("pixelSize",52);
+	    advanceMaterial.setFloat("mouse",52);
+	    advanceMaterial.setFloat("fps",52);
+
+	    var compositeMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "compositeFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:['worldViewProjection']
+	    });
+
+	    var blurHorizontalMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blurHorizontalFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:['worldViewProjection']
+	    });
+
+	    var blurVerticalMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	// vertex: "Lines", 
+	    	// fragment: "Lines"
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "blurVerticalFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:['worldViewProjection']
+	    });
+
+		
+		// blendMaterial.setFloat('uProcessing',1);// 中间角度
+	   
+		sphere.material = blurVerticalMaterial;
+		sphere.material.backFaceCulling = false;
+
+
+		var maskTexture = null;
+		var fScale = 1.0;
+
+		
+
+
+
+		// var pointerdown = function(){
+			
+		// 	console.log(1212);
+			
+			
+		// }
+
+		// scene.onPointerMove = pointerdown;
+
+		scene.onPointerObservable.add((pointerInfo) => {
+			switch (pointerInfo.type) {
+				case BABYLON.PointerEventTypes.POINTERDOWN:
+					console.log("POINTER DOWN");
+					// break;
+				case BABYLON.PointerEventTypes.POINTERUP:
+					console.log("POINTER UP");
+					// break;
+				case BABYLON.PointerEventTypes.POINTERMOVE:
+					console.log("POINTER MOVE");
+
+					
+					break;
+				case BABYLON.PointerEventTypes.POINTERWHEEL:
+					console.log("POINTER WHEEL");
+					break;
+				case BABYLON.PointerEventTypes.POINTERPICK:
+					console.log("POINTER PICK");
+					break;
+				case BABYLON.PointerEventTypes.POINTERTAP:
+					console.log("POINTER TAP");
+					break;
+				case BABYLON.PointerEventTypes.POINTERDOUBLETAP:
+					console.log("POINTER DOUBLE-TAP");
+					break;
+	        }
+	    });
+
+
+
+		scene.beforeRender = function(){
+			// console.log('beforeRendre');
+
+			
+		}
+
+
+		
+		// canvas.focus()
+		engine.runRenderLoop(function(){
+			scene.render();
+		});
+
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>
