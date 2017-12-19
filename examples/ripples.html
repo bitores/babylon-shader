@@ -19,13 +19,26 @@
 	<title>Document</title>
 	<script src="babylon.3.0.js"></script>
 	<style>
+    *{
+        padding: 0;margin: 0;
+    }
 		#renderCanvas{
 			position: fixed;
 			left: 0;bottom: 0;right: 0;top: 0;
 			margin: auto;
 			width: 100%;
 			height: 100%;
+            z-index: 100;
+            display: none;
 		}
+        #testCanavas{
+            position: fixed;
+            left: 0;bottom: 0;right: 0;top: 0;
+            margin: auto;
+            width: 100%;
+            height: 100%;
+            z-index: 101;
+        }
 	</style>
 	<script type="application/vertexShader" id="vertSrc_shader">
 		attribute vec2 vertex;
@@ -90,7 +103,7 @@
         }
     </script>
 
-    <script type="application/vertexShader" id="vertSrc_render">
+    <script type="application/fragmentShader" id="fragSrc_render">
         precision highp float;
         uniform sampler2D samplerBackground;
         uniform sampler2D samplerRipples;
@@ -103,7 +116,7 @@
             gl_FragColor = texture2D(samplerBackground, backgroundCoord + offset * perturbance) + specular;
         }
     </script>
-    <script type="application/fragmentShader" id="fragSrc_render">
+    <script type="application/vertexShader" id="vertSrc_render">
         precision highp float;
         attribute vec2 vertex;
         uniform vec2 topLeft;
@@ -122,6 +135,7 @@
 <body>
 <!-- https://www.eternalcoding.com/?p=113 -->
 	<canvas id="renderCanvas"></canvas>
+    <canvas id="testCanvas"></canvas>
 	<script>
 		var canvas = document.getElementById('renderCanvas');
 		var engine = new BABYLON.Engine(canvas, true);
@@ -138,345 +152,359 @@
 
 		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
 
-        var DefaultRipplesOption = {
-            resolution: 512,
-            dropRadius: 20, //px
-            perturbance: 0.04
-        };
+        _gl = engine._gl;
 
-        var SIMUSIZEPX = 512;
-    var SIMUWIDTH = 2;
-    var GPGPU_NPASS = 2;
-    var WATER_DEEP = 0.01;
-    var RENDERING_FLOOR_SIZE = 0.5;
-    var FLOWMIN = 2;
-    var DFLOW = 2;
+        var canvas = document.getElementById('testCanvas');
+        _gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+        canvas.width = canvas.height = Math.max(window.innerWidth, window.innerHeight);
 
 
-        var CANVAS = canvas;
-    CANVAS.width = CANVAS.height = Math.max(window.innerWidth, window.innerHeight);
-    var GL = engine._gl;
-    var POINTER_X = 0.5, POINTER_Y = 0.5;
-    var mouseMove = function (event) {
-        SOURCEFLOW = FLOWMIN + Math.random() * DFLOW;
-        var evPointer = event;
-        if (('touches' in event) && event.touches.length !== 0) {
-            evPointer = event.touches[0];
+        var vertSrc_shader = document.getElementById("vertSrc_shader").innerHTML;
+        var fragSrc_drop = document.getElementById("fragSrc_drop").innerHTML;
+        var fragSrc_update0 = document.getElementById("fragSrc_update0").innerHTML;
+        var fragSrc_update1 = document.getElementById("fragSrc_update1").innerHTML;
+        var vertSrc_render = document.getElementById("vertSrc_render").innerHTML;
+        var fragSrc_render = document.getElementById("fragSrc_render").innerHTML;
+
+
+
+        function createProgram(vertexSource, fragmentSource, uniformValues) 
+        {
+            function compileSource(type, source) {
+                var shader = gl.createShader(type);
+                gl.shaderSource(shader, source);
+                gl.compileShader(shader);
+                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                    throw new Error('compile error: ' + gl.getShaderInfoLog(shader));
+                }
+                return shader;
+            }
+            
+            var program = {};
+            
+            program.id = gl.createProgram();
+            gl.attachShader(program.id, compileSource(gl.VERTEX_SHADER, vertexSource));
+            gl.attachShader(program.id, compileSource(gl.FRAGMENT_SHADER, fragmentSource));
+            gl.linkProgram(program.id);
+            if (!gl.getProgramParameter(program.id, gl.LINK_STATUS)) {
+                throw new Error('link error: ' + gl.getProgramInfoLog(program.id));
+            }
+
+            // Fetch the uniform and attribute locations
+            program.uniforms = {};
+            program.locations = {};
+            gl.useProgram(program.id);
+            gl.enableVertexAttribArray(0);
+            var name, type, regex = /uniform (\w+) (\w+)/g, shaderCode = vertexSource + fragmentSource;
+            while ((match = regex.exec(shaderCode)) != null) {
+                name = match[2];
+                program.locations[name] = gl.getUniformLocation(program.id, name);
+            }
+            
+            return program;
         }
-        POINTER_X = (evPointer.clientX - CANVAS.offsetLeft) / CANVAS.width;
-        POINTER_Y = 1 - evPointer.clientY / CANVAS.height;
-    };
-    var SOURCEFLOW = 0;
-
-
-    CANVAS.addEventListener("mousemove", mouseMove, false);
-    CANVAS.addEventListener("mouseout", function () {
-        SOURCEFLOW = 0;
-    }, false);
-    CANVAS.addEventListener("mouseenter", function (e) {
-        SOURCEFLOW = FLOWMIN + Math.random() * DFLOW;
-        mouseMove(e);
-    }, false);
-    CANVAS.addEventListener("touchmove", mouseMove, false);
-    CANVAS.addEventListener("touchstart", function (e) {
-        if (e.touches.length === 1) {
-            SOURCEFLOW = FLOWMIN + Math.random() * DFLOW;
-            mouseMove(e);
-        }
-    }, false);
-    CANVAS.addEventListener("touchend", function (e) {
-        if (e.touches.length === 0) {
-            SOURCEFLOW = 0;
-        }
-    }, false);
-    var SCALESCREEN = [CANVAS.width / window.innerWidth, CANVAS.height / window.innerHeight];
-    
-    var EXT_FLOAT = GL.getExtension('OES_texture_float') || GL.getExtension('MOZ_OES_texture_float') || GL.getExtension('WEBKIT_OES_texture_float');
-    var vertSrc_shader = document.getElementById("vertSrc_shader").innerHTML;
-    var fragSrc_drop = document.getElementById("fragSrc_drop").innerHTML;
-    var fragSrc_update0 = document.getElementById("fragSrc_update0").innerHTML;
-    var fragSrc_update1 = document.getElementById("fragSrc_update1").innerHTML;
-    var vertSrc_render = document.getElementById("vertSrc_render").innerHTML;
-    var fragSrc_render = document.getElementById("fragSrc_render").innerHTML;
-
-
-
-    
-
-    
-
-    var get_shader = function (source, type, typeString) {
-        var shader = GL.createShader(type);
-        GL.shaderSource(shader, source);
-        GL.compileShader(shader);
-        if (!GL.getShaderParameter(shader, GL.COMPILE_STATUS)) {
-            alert("ERROR IN " + typeString + " SHADER : " + GL.getShaderInfoLog(shader));
-            return false;
-        }
-        return shader;
-    };
-    var get_shaderProgram = function (vertex_source, fragment_source, typeStr) {
-        var shader_vertex = get_shader(vertex_source, GL.VERTEX_SHADER, typeStr + " VERTEX");
-        var shader_fragment = get_shader(fragment_source, GL.FRAGMENT_SHADER, typeStr + " FRAGMENT");
-        var shader_program = GL.createProgram();
-        GL.attachShader(shader_program, shader_vertex);
-        GL.attachShader(shader_program, shader_fragment);
-        GL.linkProgram(shader_program);
-        return shader_program;
-    };
-    var SHP_VARS = {};
-    var SHP_RENDERING = get_shaderProgram(vertSrc_render, fragSrc_render, "RENDER");
-    SHP_VARS.rendering = {
-        H: GL.getUniformLocation(SHP_RENDERING, "H"),
-        L: GL.getUniformLocation(SHP_RENDERING, "L"),
-        l: GL.getUniformLocation(SHP_RENDERING, "l"),
-        scaleScreen: GL.getUniformLocation(SHP_RENDERING, "scaleScreen"),
-        sampler: GL.getUniformLocation(SHP_RENDERING, "sampler"),
-        sampler_normals: GL.getUniformLocation(SHP_RENDERING, "sampler_normals"),
-        sampler_mask: GL.getUniformLocation(SHP_RENDERING, "sampler_mask"),
-        position: GL.getAttribLocation(SHP_RENDERING, "position")
-    };
-    var SHP_WATER = get_shaderProgram(vertSrc_render, fragSrc_water, "WATER");
-    SHP_VARS.water = {
-        dt: GL.getUniformLocation(SHP_WATER, "dt"),
-        H: GL.getUniformLocation(SHP_WATER, "H"),
-        b: GL.getUniformLocation(SHP_WATER, "b"),
-        g: GL.getUniformLocation(SHP_WATER, "g"),
-        mouse: GL.getUniformLocation(SHP_WATER, "mouse"),
-        sourceFlow: GL.getUniformLocation(SHP_WATER, "sourceFlow"),
-        sourceRadius: GL.getUniformLocation(SHP_WATER, "sourceRadius"),
-        scaleScreen: GL.getUniformLocation(SHP_WATER, "scaleScreen"),
-        epsilon: GL.getUniformLocation(SHP_WATER, "epsilon"),
-        scale: GL.getUniformLocation(SHP_WATER, "scale"),
-        sampler_water: GL.getUniformLocation(SHP_WATER, "sampler_water"),
-        sampler_normals: GL.getUniformLocation(SHP_WATER, "sampler_normals"),
-        sampler_mask: GL.getUniformLocation(SHP_WATER, "sampler_mask"),
-        position: GL.getAttribLocation(SHP_WATER, "position")
-    };
-    var SHP_COPY = get_shaderProgram(vertSrc_render, fragSrc_copy, "COPY");
-    SHP_VARS.copy = {
-        scale: GL.getUniformLocation(SHP_COPY, "scale"),
-        sampler: GL.getUniformLocation(SHP_COPY, "sampler"),
-        position: GL.getAttribLocation(SHP_COPY, "position")
-    };
-    var SHP_NORMALS = get_shaderProgram(vertSrc_render, fragSrc_normals, "NORMALS");
-    SHP_VARS.normals = {
-        sampler: GL.getUniformLocation(SHP_NORMALS, "sampler"),
-        scale: GL.getUniformLocation(SHP_NORMALS, "scale"),
-        epsilon: GL.getUniformLocation(SHP_NORMALS, "epsilon"),
-        position: GL.getAttribLocation(SHP_NORMALS, "position")
-    };
-
-    var quad_vertex = [-1, -1, 1, -1, 1, 1, -1, 1];
-    var QUAD_VERTEX = GL.createBuffer();
-    GL.bindBuffer(GL.ARRAY_BUFFER, QUAD_VERTEX);
-    GL.bufferData(GL.ARRAY_BUFFER, new Float32Array(quad_vertex), GL.STATIC_DRAW);
-    
-    var quad_faces = [0, 1, 2, 0, 2, 3];
-    var QUAD_FACES = GL.createBuffer();
-    GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, QUAD_FACES);
-    GL.bufferData(GL.ELEMENT_ARRAY_BUFFER, new Uint16Array(quad_faces), GL.STATIC_DRAW);
-
-    var nLoaded = 0;
-    var check_loaded = function () {
-        ++nLoaded;
-        if (nLoaded === 2) {
-            GL.activeTexture(GL.TEXTURE2);
-            GL.bindTexture(GL.TEXTURE_2D, texture_mask);
-            GL.activeTexture(GL.TEXTURE0);
-            console.log('Loading finished, launch animate()');
-            animate(new Date().getTime());
-        }
-    };
-    var createTexture = function (url) {
-        var renderingImage = new Image();
-        renderingImage.src = url;
-        var texture = GL.createTexture();
-        renderingImage.onload = function () {
-            GL.bindTexture(GL.TEXTURE_2D, texture);
-            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.LINEAR);
-            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);
-            GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, GL.RGBA, GL.UNSIGNED_BYTE, renderingImage);
-            check_loaded();
-        };
-        return texture;
-    };
-    var fb_water = GL.createFramebuffer();
-    GL.bindFramebuffer(GL.FRAMEBUFFER, fb_water);
-
-    var texture_water = GL.createTexture();
-    GL.bindTexture(GL.TEXTURE_2D, texture_water);
-
-    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.NEAREST);
-    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.NEAREST);
-    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
-    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);
-    GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, SIMUSIZEPX, SIMUSIZEPX, 0, GL.RGBA, GL.FLOAT, null);
-
-    var texture_water_copy = GL.createTexture();
-    GL.bindTexture(GL.TEXTURE_2D, texture_water_copy);
-    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.NEAREST);
-    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.NEAREST);
-    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
-    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);
-    GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, SIMUSIZEPX, SIMUSIZEPX, 0, GL.RGBA, GL.FLOAT, null);
-
-    var texture_normals = GL.createTexture();
-    GL.bindTexture(GL.TEXTURE_2D, texture_normals);
-    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.NEAREST);
-    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.NEAREST);
-    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
-    GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);
-    GL.texImage2D(GL.TEXTURE_2D, 0, GL.RGBA, SIMUSIZEPX, SIMUSIZEPX, 0, GL.RGBA, GL.FLOAT, null);
-
-    GL.disable(GL.DEPTH_TEST);
-    GL.disable(GL.SCISSOR_TEST);
-    GL.clearColor(0.0, 0.0, 0.0, 0.0);
-
-    GL.useProgram(SHP_RENDERING);
-    GL.uniform1f(SHP_VARS.rendering.H, WATER_DEEP);
-    GL.uniform1f(SHP_VARS.rendering.L, SIMUWIDTH);
-    GL.uniform1f(SHP_VARS.rendering.l, RENDERING_FLOOR_SIZE);
-    GL.uniform1i(SHP_VARS.rendering.sampler, 0);
-    GL.uniform1i(SHP_VARS.rendering.sampler_normals, 1);
-    GL.uniform1i(SHP_VARS.rendering.sampler_mask, 2);
-    GL.uniform2fv(SHP_VARS.rendering.scaleScreen, SCALESCREEN);
-    
-    GL.vertexAttribPointer(SHP_VARS.rendering.position, 2, GL.FLOAT, false, 8, 0);
-    GL.bindBuffer(GL.ARRAY_BUFFER, QUAD_VERTEX);
-    GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, QUAD_FACES);
-    GL.disableVertexAttribArray(SHP_VARS.rendering.position);
-
-    GL.useProgram(SHP_WATER);
-    GL.uniform1i(SHP_VARS.water.sampler_water, 0);
-    GL.uniform1i(SHP_VARS.water.sampler_normals, 1);
-    GL.uniform1i(SHP_VARS.water.sampler_mask, 2);
-    GL.uniform2fv(SHP_VARS.water.scaleScreen, SCALESCREEN);
-    GL.uniform1f(SHP_VARS.water.g, -9.8);
-    GL.uniform1f(SHP_VARS.water.H, WATER_DEEP);
-    GL.uniform1f(SHP_VARS.water.b, 0.001);
-    GL.uniform1f(SHP_VARS.water.epsilon, 1 / SIMUSIZEPX);
-    GL.uniform1f(SHP_VARS.water.scale, SIMUWIDTH / SIMUSIZEPX);
-    GL.uniform1f(SHP_VARS.water.sourceRadius, 0.005);
-
-    GL.enableVertexAttribArray(SHP_VARS.water.position);
-    GL.vertexAttribPointer(SHP_VARS.water.position, 2, GL.FLOAT, false, 8, 0);
-    GL.bindBuffer(GL.ARRAY_BUFFER, QUAD_VERTEX);
-    GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, QUAD_FACES);
-    GL.disableVertexAttribArray(SHP_VARS.water.position);
-
-    GL.useProgram(SHP_COPY);
-    GL.uniform1f(SHP_VARS.copy.scale, SIMUSIZEPX);
-    GL.uniform1i(SHP_VARS.copy.sampler, 0);
-
-    GL.enableVertexAttribArray(SHP_VARS.copy.position);
-    GL.vertexAttribPointer(SHP_VARS.copy.position, 2, GL.FLOAT, false, 8, 0);
-    GL.bindBuffer(GL.ARRAY_BUFFER, QUAD_VERTEX);
-    GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, QUAD_FACES);
-    GL.disableVertexAttribArray(SHP_VARS.copy.position);
-
-    GL.useProgram(SHP_NORMALS);
-    GL.uniform1i(SHP_VARS.normals.sampler, 0);
-    GL.uniform1f(SHP_VARS.normals.epsilon, 1 / SIMUSIZEPX);
-    GL.uniform1f(SHP_VARS.normals.scale, SIMUWIDTH);
-
-    GL.enableVertexAttribArray(SHP_VARS.normals.position);
-    GL.vertexAttribPointer(SHP_VARS.normals.position, 2, GL.FLOAT, false, 8, 0);
-    GL.bindBuffer(GL.ARRAY_BUFFER, QUAD_VERTEX);
-    GL.bindBuffer(GL.ELEMENT_ARRAY_BUFFER, QUAD_FACES);
-    GL.disableVertexAttribArray(SHP_VARS.normals.position);
-
-    var old_timestamp = new Date().getTime();
-    var old_timestamp = 0;
-
-    var renderingTexture = createTexture('images/water.jpg');
-    var texture_mask = createTexture('images/mask.png');
-
-    window.requestAnimFrame = (function(){
-	  return  window.requestAnimationFrame       ||
-	          window.webkitRequestAnimationFrame ||
-	          window.mozRequestAnimationFrame    ||
-	          function( callback ){
-	            window.setTimeout(callback, 1000 / 60);
-	          };
-	})();
-
-    var animate = function (timestamp) {
-
-        var dt = (timestamp - old_timestamp) / 1000; //time step in seconds;
-
-        dt = Math.min(Math.abs(dt), 0.017);
-        old_timestamp = timestamp;
-        GL.bindFramebuffer(GL.FRAMEBUFFER, fb_water);
-
-        for (var i = 0; i < GPGPU_NPASS; i++) {
-            GL.useProgram(SHP_COPY);
-            GL.viewport(0.0, 0.0, SIMUSIZEPX, SIMUSIZEPX);
-
-            GL.framebufferTexture2D(GL.FRAMEBUFFER, GL.COLOR_ATTACHMENT0, GL.TEXTURE_2D, texture_water_copy, 0);
-            GL.enableVertexAttribArray(SHP_VARS.copy.position);
-            GL.bindTexture(GL.TEXTURE_2D, texture_water);
-            GL.drawElements(GL.TRIANGLES, 6, GL.UNSIGNED_SHORT, 0);
-            GL.disableVertexAttribArray(SHP_VARS.copy.position);
-
-            GL.framebufferTexture2D(GL.FRAMEBUFFER, GL.COLOR_ATTACHMENT0, GL.TEXTURE_2D, texture_water, 0);
-            GL.useProgram(SHP_WATER);
-            GL.enableVertexAttribArray(SHP_VARS.water.position);
-            GL.activeTexture(GL.TEXTURE1);
-            GL.bindTexture(GL.TEXTURE_2D, texture_normals);
-
-            GL.activeTexture(GL.TEXTURE0);
-            GL.bindTexture(GL.TEXTURE_2D, texture_water_copy);
-
-	         if (i === 0) {
-	                GL.uniform2f(SHP_VARS.water.mouse, POINTER_X, POINTER_Y);
-	                GL.uniform1f(SHP_VARS.water.sourceFlow, SOURCEFLOW);
-	                GL.uniform1f(SHP_VARS.water.dt, dt / GPGPU_NPASS);
-	        
-
-	            GL.drawElements(GL.TRIANGLES, 6, GL.UNSIGNED_SHORT, 0);
-	            GL.disableVertexAttribArray(SHP_VARS.water.position);
-	            GL.framebufferTexture2D(GL.FRAMEBUFFER, GL.COLOR_ATTACHMENT0, GL.TEXTURE_2D, texture_normals, 0);
-	            GL.useProgram(SHP_NORMALS);
-	            GL.enableVertexAttribArray(SHP_VARS.normals.position);
-	            GL.bindTexture(GL.TEXTURE_2D, texture_water);
-	            GL.drawElements(GL.TRIANGLES, 6, GL.UNSIGNED_SHORT, 0);
-	            GL.disableVertexAttribArray(SHP_VARS.normals.position);
-	        }
-
-	        GL.bindFramebuffer(GL.FRAMEBUFFER, null);
-	        GL.useProgram(SHP_RENDERING);
-	        GL.enableVertexAttribArray(SHP_VARS.rendering.position);
-	        GL.viewport(0.0, 0.0, CANVAS.width, CANVAS.height);
-	        GL.activeTexture(GL.TEXTURE1);
-	        GL.bindTexture(GL.TEXTURE_2D, texture_normals);
-	        GL.activeTexture(GL.TEXTURE0);
-	        GL.bindTexture(GL.TEXTURE_2D, renderingTexture);
-	        GL.drawElements(GL.TRIANGLES, 6, GL.UNSIGNED_SHORT, 0);
-	        GL.disableVertexAttribArray(SHP_VARS.rendering.position);
-	        GL.flush();
-
-	        // 
-	        
-	    };
-        console.log(1);
-// 
- 		window.requestAnimationFrame(animate);
-    };
-
-
-    // scene.registerBeforeRender() = animate;
-
-    
-
-   
-
         
-// var scene = new BABYLON.Scene(engine);
-//     var camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI / 4, Math.PI / 2.5, 200, BABYLON.Vector3.Zero(), scene);
-//     camera.attachControl(canvas, true);
-//     camera.minZ = 0.1;
+        function bindTexture(texture, unit) {
+            gl.activeTexture(gl.TEXTURE0 + (unit || 0)); 
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+        }
+        
+        var Ripples = function ( options) {
 
+            var that = this;
+            
+            backgroundUrl =options.backgroundUrl;
+            
+            this.resolution = options.resolution || 256;
+            this.textureDelta = new Float32Array([1 / this.resolution, 1 / this.resolution]);
+            
+            this.perturbance = options.perturbance;
+            this.dropRadius = options.dropRadius;
+            
+            var canvas = options.canvas;
+            // canvas.width = options.innerWidth;
+            // canvas.height = options.innerHeight;
+            this.canvas = canvas;
+
+            this.context = gl = options.GL;
+  
+            // Load extensions
+            gl.getExtension('OES_texture_float');
+            gl.getExtension('OES_texture_float_linear');
+            
+
+            canvas.addEventListener("mousemove", function(e){
+                console.log(e)
+                if (that.visible) that.dropAtMouse(e, that.dropRadius, 0.01);
+            }, false);
+            canvas.addEventListener("mouseout", function (e) {
+                if (that.visible) that.dropAtMouse(e, that.dropRadius * 1.5, 0.14);
+            }, false);
+            canvas.addEventListener("mouseenter", function (e) {
+               if (that.visible) that.dropAtMouse(e, that.dropRadius, 0.01);
+            }, false);
+            canvas.addEventListener("touchmove", function(e){
+                if (that.visible) that.dropAtMouse(e, that.dropRadius, 0.01);
+            }, false);
+            canvas.addEventListener("touchstart", function (e) {
+                if (e.touches.length === 1) {
+                    if (that.visible) that.dropAtMouse(e, that.dropRadius, 0.01);
+                }
+            }, false);
+            canvas.addEventListener("touchend", function (e) {
+                if (e.touches.length === 0) {
+                    if (that.visible) that.dropAtMouse(e, that.dropRadius * 1.5, 0.14);
+                }
+            }, false);
+
+
+            
+            this.textures = [];
+            this.framebuffers = [];
+
+            for (var i = 0; i < 2; i++) {
+                var texture = gl.createTexture();
+                var framebuffer = gl.createFramebuffer();
+                
+                gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+                framebuffer.width = this.resolution;
+                framebuffer.height = this.resolution;
+
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); 
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.resolution, this.resolution, 0, gl.RGBA, gl.FLOAT, null);
+
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+                if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
+                    throw new Error('Rendering to this texture is not supported (incomplete framebuffer)');
+                }
+                
+                gl.bindTexture(gl.TEXTURE_2D, null);
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                
+                this.textures.push(texture);
+                this.framebuffers.push(framebuffer);
+            }
+
+            // Init GL stuff
+            this.quad = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                -100, -100,
+                +100, -100,
+                +100, +100,
+                -100, +100
+            ]), gl.STATIC_DRAW);
+            
+            this.initShaders();
+            
+            // Init textures
+            var image = new Image;
+            image.crossOrigin = '';
+            image.onload = function() {
+                gl = that.context;
+                
+                function isPowerOfTwo(x) {
+                    return (x & (x - 1)) == 0;
+                }
+                
+                var wrapping = (isPowerOfTwo(image.width) && isPowerOfTwo(image.height)) ? gl.REPEAT : gl.CLAMP_TO_EDGE;
+                
+                that.backgroundWidth = image.width;
+                that.backgroundHeight = image.height;
+                
+                var texture = gl.createTexture();
+                
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapping);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapping);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+                
+                that.backgroundTexture = texture;
+                
+                // Everything loaded successfully - hide the CSS background image
+                // that.$el.css('backgroundImage', 'none');
+            };
+            image.src = backgroundUrl;
+            
+            this.visible = true;
+
+            that.computeTextureBoundaries();
+            
+            // Init animation
+            function step() {
+                that.update();
+                requestAnimationFrame(step);
+            }
+            
+            requestAnimationFrame(step);
+        }
+
+        Ripples.DEFAULTS = {
+            resolution: 256,
+            dropRadius: 20,
+            perturbance: 0.03,
+            textures:[],
+            framebuffers:[]
+        };
+
+        Ripples.prototype = {
+
+        update: function() {
+            gl = this.context;
+            
+            // if (!this.visible || !this.backgroundTexture) return;
+
+            
+            // update Textures
+            
+            gl.viewport(0, 0, this.resolution, this.resolution);
+
+                        // 绘制到缓冲区0
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+            bindTexture(this.textures[1]);
+            gl.useProgram(this.updateProgram[0].id);
+            this.drawQuad();
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+            // 绘制到缓冲区1
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[1]);
+            bindTexture(this.textures[0]);
+            gl.useProgram(this.updateProgram[1].id);
+            this.drawQuad();
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+
+            // render
+
+            gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            // gl.clearColor(0,0,0,0);
+            gl.useProgram(this.renderProgram.id);
+            
+            bindTexture(this.backgroundTexture, 0);
+            bindTexture(this.textures[0], 1);
+            
+            // gl.uniform2fv(this.renderProgram.locations.topLeft, this.renderProgram.uniforms.topLeft);
+            // gl.uniform2fv(this.renderProgram.locations.bottomRight, this.renderProgram.uniforms.bottomRight);
+            gl.uniform2fv(this.renderProgram.locations.containerRatio, this.renderProgram.uniforms.containerRatio);
+            gl.uniform1i(this.renderProgram.locations.samplerBackground, 0);
+            gl.uniform1i(this.renderProgram.locations.samplerRipples, 1);
+            
+            this.drawQuad();
+        },
+        
+        drawQuad: function() {
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+            gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+        },
+        
+        
+        computeTextureBoundaries: function() {
+            
+            this.renderProgram.uniforms.topLeft = new Float32Array([
+                0,
+                0
+            ]);
+            this.renderProgram.uniforms.bottomRight = new Float32Array([
+                1,
+                1
+            ]);
+            
+            var maxSide = Math.max(this.canvas.width, this.canvas.height);
+            
+            this.renderProgram.uniforms.containerRatio = new Float32Array([
+                this.canvas.width / maxSide,
+                this.canvas.height / maxSide
+            ]);
+        },
+        
+        initShaders: function() {
+
+            
+            this.dropProgram = createProgram(vertSrc_shader, fragSrc_drop);
+            
+            this.updateProgram = [
+                createProgram(vertSrc_shader, fragSrc_update0),
+                createProgram(vertSrc_shader, fragSrc_update1)
+            ];
+            
+            gl.uniform2fv(this.updateProgram[0].locations.delta, this.textureDelta);
+            gl.uniform2fv(this.updateProgram[1].locations.delta, this.textureDelta);
+            
+            this.renderProgram = createProgram(vertSrc_render, fragSrc_render);
+            gl.uniform1f(this.renderProgram.locations.perturbance, this.perturbance);
+        },
+        
+        dropAtMouse: function(e, radius, strength) {
+            var that = this;
+
+            gl = this.context;
+            // console.log(e);
+            
+            e.offsetX = e.offsetX || (e.pageX - this.$el.offset().left);
+            e.offsetY = e.offsetY || (e.pageY - this.$el.offset().top);
+
+            // var elWidth = this.$el.outerWidth();
+            // var elHeight = this.$el.outerHeight();
+            var elWidth = window.innerWidth;
+            var elHeight = window.innerHeight;
+            var longestSide = Math.max(elWidth, elHeight);
+            
+      
+            
+            radius = radius / longestSide;
+            
+            var dropPosition = new Float32Array([
+                (2 * e.offsetX - elWidth) / longestSide, 
+                (elHeight - 2 * e.offsetY) / longestSide
+            ]);
+
+            // console.log(dropPosition)
+
+            gl.viewport(0, 0, this.resolution, this.resolution);
+            
+            // Render onto texture/framebuffer 0
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
+            
+            // Using texture 1
+            bindTexture(this.textures[1]);
+
+            gl.useProgram(this.dropProgram.id);
+            gl.uniform2fv(this.dropProgram.locations.center, dropPosition);
+            gl.uniform1f(this.dropProgram.locations.radius, radius);
+            gl.uniform1f(this.dropProgram.locations.strength, strength);
+            
+            this.drawQuad();
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            // Switch textures
+            var t = this.framebuffers[0]; this.framebuffers[0] = this.framebuffers[1]; this.framebuffers[1] = t;
+                t = this.textures[0]; this.textures[0] = this.textures[1]; this.textures[1] = t;
+            
+            
+        }
+    };
+
+    new Ripples({
+        resolution: 512,
+            dropRadius: 20, //px
+            perturbance: 0.04,
+            canvas:canvas,
+            GL:_gl,
+            backgroundUrl:'images/bg2.jpg'
+    });
 	</script>
 </body>
 </html>

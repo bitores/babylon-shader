@@ -195,9 +195,12 @@
     var FLOWMIN = 2;
     var DFLOW = 2;
 
-    var CANVAS = canvas;
+    var CANVAS = document.createElement('canvas');
+    CANVAS.style = "position: absolute;left: 0;bottom: 0;right: 0;top: 0;margin: auto;width: 100%;height: 100%;z-index: 101;";
+    // var canvasZone = document.getElementById("canvasZone");
+    document.body.appendChild(CANVAS);
     CANVAS.width = CANVAS.height = Math.max(window.innerWidth, window.innerHeight);
-    var GL = engine._gl;
+    var GL = CANVAS.getContext('webgl') || CANVAS.getContext('experimental-webgl');
     var POINTER_X = 0.5, POINTER_Y = 0.5;
     var mouseMove = function (event) {
         SOURCEFLOW = FLOWMIN + Math.random() * DFLOW;
@@ -206,7 +209,9 @@
             evPointer = event.touches[0];
         }
         POINTER_X = (evPointer.clientX - CANVAS.offsetLeft) / CANVAS.width;
-        POINTER_Y = 1 - evPointer.clientY / CANVAS.height;
+        POINTER_Y = 1 - evPointer.clientY / CANVAS.height ;
+
+        // console.log(POINTER_X, POINTER_Y);
     };
     var SOURCEFLOW = 0;
     CANVAS.addEventListener("mousemove", mouseMove, false);
