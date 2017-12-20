@@ -350,9 +350,7 @@
         Ripples.DEFAULTS = {
             resolution: 256,
             dropRadius: 20,
-            perturbance: 0.03,
-            textures:[],
-            framebuffers:[]
+            perturbance: 0.03
         };
 
         Ripples.prototype = {
@@ -418,8 +416,8 @@
                 0
             ]);
             this.renderProgram.uniforms.bottomRight = new Float32Array([
-                1,
-                1
+                0.5,
+                0.5
             ]);
             
             var maxSide = Math.max(this.canvas.width, this.canvas.height);
@@ -499,11 +497,11 @@
 
     new Ripples({
         resolution: 512,
-            dropRadius: 20, //px
-            perturbance: 0.04,
-            canvas:canvas,
-            GL:_gl,
-            backgroundUrl:'images/bg2.jpg'
+        dropRadius: 20, //px
+        perturbance: 0.04,
+        canvas:canvas,
+        GL:_gl,
+        backgroundUrl:'images/bg2.jpg'
     });
 	</script>
 </body>
