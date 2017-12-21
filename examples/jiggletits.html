@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name='viewport' content='width=device-width,initial-scale=1.0,user-scalable=no'>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name='renderer' content='webkit'>
+	<meta name='x5-page-mode' content='app'>
+	<meta name='x5-orientation' content='portrait'>
+	<meta name="x5-fullscreen" content="true">
+	<meta name="full-screen" content="yes">
+	<meta name='layoutmode' content='standard'>
+	<meta name='mobile-web-app-capable' content='yes'>
+	<meta name='browsermode' content='application'>
+	<meta name='screen-orientation' content='portrait'>
+	<meta name='format-detection' content='telephone=no'>
+	<meta name='apple-mobile-web-app-capable' content='yes'>
+	<meta name='apple-mobile-web-app-status-bar-style' content='black'>
+	<title>Document</title>
+	<!-- <script type="text/javascript" src="pep.js"></script> -->
+	<script type="text/javascript" src="hand.minified-1.2.js"></script>
+	<script src="babylon.2.5.max.js"></script>
+	<style>
+		#renderCanvas{
+			position: fixed;
+			left: 0;bottom: 0;right: 0;top: 0;
+			margin: auto;
+			width: 100%;
+			height: 100%;
+		}
+	</style>
+	<script type="application/vertexShader" id="blendVertexShader">
+		precision highp float;
+		precision highp int;
+
+		uniform mat4 worldViewProjection;
+
+		attribute vec3 position;
+		attribute vec2 uv;
+
+		varying vec2 vTexCoord;
+
+		void main()
+		{
+			vTexCoord = uv;			
+			gl_Position = worldViewProjection * vec4(position, 1.0);
+		}
+	</script>
+
+	<script type="application/fragmentShader" id="nextBumpFragmentShader">
+		precision mediump float;
+
+		uniform sampler2D bumpMap;
+		uniform sampler2D weightMap;
+		uniform vec3 force;
+		uniform float forceAppled;
+		uniform float deltaTime;
+		uniform float inverseViewportWidth;
+		uniform float inverseViewportHeight;
+
+		varying vec2 vTexCoord;
+
+
+		#define WEIGHT_FACTOR 100.0
+		#define NEIGHBOR_FACTOR 100.0
+		#define P 10.0
+		#define P2 1.0
+		#define R 0.2
+		#define APPLIED_FORCE_FACTOR 1.5
+
+		vec4 decode(vec4 color)
+		{
+			return color * 2.0 - 1.0;
+		}
+
+		vec4 encode(vec4 value)
+		{
+			vec4 color = (value + 1.0) / 2.0;
+			return color;
+		}
+
+
+		void main() {
+			vec4 bump = decode(texture2D(bumpMap, vTexCoord));
+			
+			vec2 leftOffset = vec2(-inverseViewportWidth, 0.0);
+			vec2 rightOffset = vec2(inverseViewportWidth, 0.0);
+			vec2 topOffset = vec2(0.0, -inverseViewportHeight);
+			vec2 bottomOffset = vec2(0.0, inverseViewportHeight);
+
+			vec4 bumpL = decode(texture2D(bumpMap, vTexCoord + leftOffset));
+			vec4 bumpR = decode(texture2D(bumpMap, vTexCoord + rightOffset));
+			vec4 bumpT = decode(texture2D(bumpMap, vTexCoord + topOffset));
+			vec4 bumpB = decode(texture2D(bumpMap, vTexCoord + bottomOffset));
+			
+			
+			float weight = texture2D(weightMap, vTexCoord).r * WEIGHT_FACTOR;
+			
+			// 1. self force
+			vec2 totalForce = - weight * bump.rg;
+			
+			// 2. applied force
+			if (force.z == 1.0){ 
+				vec2 forcePosDiff = force.xy - vTexCoord;
+				//vec2 forceDir = normalize(forcePosDiff);
+				//float distance = length(forcePosDiff);
+				//force = force + forceDir * 1.0 / (2.0 + distance);
+				if (forcePosDiff.x >= 0.0)
+					forcePosDiff.x = 1.0 - forcePosDiff.x;
+				else
+					forcePosDiff.x = -1.0 - forcePosDiff.x;
+				if (forcePosDiff.y >= 0.0)
+					forcePosDiff.y = 1.0 - forcePosDiff.y;
+				else
+					forcePosDiff.y = -1.0 - forcePosDiff.y;
+				totalForce = totalForce + forcePosDiff * APPLIED_FORCE_FACTOR;
+			} else if (force.z == 2.0) {
+				totalForce = totalForce + force.xy * APPLIED_FORCE_FACTOR;
+			}
+
+			// 3. neighbor force
+			totalForce = totalForce +
+					((bumpL.rg - bump.rg + leftOffset) + 
+					 (bumpR.rg - bump.rg + rightOffset) + 
+					 (bumpT.rg - bump.rg + topOffset) +
+					 (bumpB.rg - bump.rg + bottomOffset)) * NEIGHBOR_FACTOR;
+			
+			// 4. friction
+			if (length(bump.ba) > 0.1)
+				totalForce = totalForce - normalize(bump.ba) * R;
+
+			vec4 newBump;
+			// velocity
+			newBump.ba = bump.ba + totalForce * deltaTime * P;
+			
+			// final bump
+			newBump.rg = bump.rg + newBump.ba * deltaTime * P2;
+
+			gl_FragColor = encode(newBump);
+		}
+	</script>
+
+	<script type="application/fragmentShader" id="swapFragmentShader">
+		precision mediump float;
+
+		uniform sampler2D usTexture;
+		uniform float inverseViewportWidth;
+		uniform float inverseViewportHeight;
+
+		varying vec2 vTexCoord;
+
+		void main() {
+			vec4 pixelColor = texture2D(usTexture, vTexCoord);
+			
+			vec2 leftOffset = vec2(-inverseViewportWidth, 0.0);
+			vec2 rightOffset = vec2(inverseViewportWidth, 0.0);
+			vec2 topOffset = vec2(0.0, -inverseViewportHeight);
+			vec2 bottomOffset = vec2(0.0, inverseViewportHeight);
+			
+			vec4 bumpL = texture2D(usTexture, vTexCoord + leftOffset);
+			vec4 bumpR = texture2D(usTexture, vTexCoord + rightOffset);
+			vec4 bumpT = texture2D(usTexture, vTexCoord + topOffset);
+			vec4 bumpB = texture2D(usTexture, vTexCoord + bottomOffset);
+			
+			gl_FragColor = pixelColor;
+
+			gl_FragColor = (bumpL + bumpR + bumpT + bumpB + gl_FragColor) / 5.0;
+		}
+	</script>
+
+	<script type="application/fragmentShader" id="titsFragmentShader">
+		precision mediump float;
+
+		uniform sampler2D rawMap;
+		uniform sampler2D bumpMap;
+		uniform sampler2D weightMap;
+
+		varying vec2 vTexCoord;
+
+		vec2 decode(vec4 color)
+		{
+			return color.rg * 2.0 - 1.0;
+		}
+
+		void main() {
+			vec2 bump = decode(texture2D(bumpMap, vTexCoord));
+			
+			float weight = texture2D(weightMap, vTexCoord).r;
+			vec2 texCoord = vTexCoord + bump * (1.0 - weight);
+			gl_FragColor = texture2D(rawMap, texCoord);
+		}
+	</script>
+</head>
+<body>
+<!-- https://www.eternalcoding.com/?p=113 -->
+	<canvas id="renderCanvas"></canvas>
+	<script>
+		var canvas = document.getElementById('renderCanvas');
+		var engine = new BABYLON.Engine(canvas, true);
+
+		var scene = new BABYLON.Scene(engine);
+
+		// var camera = new BABYLON.FreeCamera('', new BABYLON.Vector3(0, 5, 10), scene);
+
+		var camera = new BABYLON.ArcRotateCamera("camera",0,1,25,BABYLON.Vector3.Zero(),scene);
+
+		// camera.setTarget(new BABYLON.Vector3.Zero());
+
+		// camera.attachControl(canvas, false);// 去掉，可以不用旋转 3d场景，但可以用 场景中事件
+		camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
+		camera.orthoLeft = -50;
+		camera.orthoRight = 50;
+		camera.orthoBottom = -50;
+		camera.orthoTop = 50;
+
+		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
+
+		var plane = BABYLON.Mesh.CreateGround("ground1", 100, 100, 2, scene);//BABYLON.Mesh.CreateSphere('',16,2, scene);
+
+		// plane.backFaceCulling = false;
+		
+		plane.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+		plane.rotate(BABYLON.Axis.X, Math.PI/2.0, BABYLON.Space.WORLD);
+
+
+		var dynamicTexture = new BABYLON.DynamicTexture("dynamic texture", {width:32, height:16}, scene, true);
+		var context1 = dynamicTexture.getContext();
+
+		context1.fillStyle="rgba(125,125,125,0.5)";
+		context1.fillRect(0, 0, 32, 16);
+		dynamicTexture.update();
+
+		
+
+		var assetsManager = new BABYLON.AssetsManager(scene);
+
+		assetsManager.addTextureTask("images/sw1.jpg", "images/sw1.jpg");
+		assetsManager.addTextureTask("images/sw2.jpg", "images/sw2.jpg");
+		assetsManager.addTextureTask("images/sw3.jpg", "images/sw3.jpg");
+		assetsManager.addTextureTask("images/sw4.jpg", "images/sw4.jpg");
+
+		assetsManager.load();
+		
+		// blend
+		var titsMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "titsFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:['worldViewProjection','rawMap','bumpMap','weightMap']
+	    });
+
+ 
+		titsMaterial.setTexture('rawMap', new BABYLON.Texture("images/jiggle/tits.jpg",scene, true));
+		titsMaterial.setTexture('bumpMap', dynamicTexture);
+		titsMaterial.setTexture('weightMap', new BABYLON.Texture("images/jiggle/weight.jpg",scene))
+
+
+		var nextBumpMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "nextBumpFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:['worldViewProjection','bumpMap','weightMap']
+	    });
+
+	    nextBumpMaterial.setTexture('bumpMap', dynamicTexture);
+		nextBumpMaterial.setTexture('weightMap', new BABYLON.Texture("images/jiggle/weight.jpg",scene))
+
+		nextBumpMaterial.setVector3('force', new BABYLON.Vector3(0,0,0));
+		nextBumpMaterial.setFloat('forceAppled', 1);
+		nextBumpMaterial.setFloat('deltaTime', 0.0175);
+		nextBumpMaterial.setFloat('inverseViewportWidth', window.innerWidth);
+		nextBumpMaterial.setFloat('inverseViewportHeight', window.innerHeight);
+
+
+
+
+	   
+		plane.material = nextBumpMaterial;
+		plane.material.backFaceCulling = false;
+
+
+
+
+		assetsManager.onFinish = () => {
+
+
+
+			scene.registerBeforeRender(function() {
+
+
+		        
+		    });
+
+		}
+
+
+		scene.beforeRender = function(){
+			nextBumpMaterial.setFloat('deltaTime', engine.deltaTime / 1000.0);
+		}
+
+
+		engine.runRenderLoop(function(){
+			scene.render();
+			dynamicTexture.update();
+		});
+
+		
+
+		var width = window.innerWidth, //engine.getRenderWidth(),
+			height = window.innerHeight; //engine.getRenderHeight();
+
+		console.log(width, height);
+
+		scene.beforeRender = function(){
+
+
+		}
+
+
+		if("ontouchstart" in window) {
+			canvas.addEventListener('touchstart',touch, false);  
+		    canvas.addEventListener('touchmove',touch, false);  
+		    canvas.addEventListener('touchend',touch, false); 
+		} else {
+			canvas.addEventListener('mousedown',touch, false);  
+		    canvas.addEventListener('mousemove',touch, false);  
+		    canvas.addEventListener('mousesup',touch, false);
+		}
+		 
+	      
+	    function touch (event){  
+	        var event = event || window.event;  
+	          
+	        // var oInp = document.getElementById("inp");  
+	  
+	        switch(event.type){  
+	        	case "mousedown":
+	        		onPointerDown(event.pageX, event.pageY)
+
+	        		break;
+	            case "touchstart":  
+	                // oInp.innerHTML = "Touch started (" +  + "," +  + ")"; 
+	                onPointerDown(event.touches[0].clientX, event.touches[0].clientY)
+
+	                break;  
+	            case "mouseup":
+	            	onPointerUp();
+	            	break;
+	            case "touchend":  
+	                // oInp.innerHTML = "<br/>Touch end (" + event.changedTouches[0].clientX + "," + event.changedTouches[0].clientY + ")";  event.changedTouches[0].clientX, event.changedTouches[0].clientY
+
+	                onPointerUp();
+	                break;  
+	            case "mousemove":
+	            	event.preventDefault();  
+	                
+	                // oInp.innerHTML = "<br/>Touch moved (" + event.touches[0].clientX + "," + event.touches[0].clientY + ")";  
+	                onPointerMove(event.pageX, event.pageY);
+
+	            	break;
+	            case "touchmove":  
+	                event.preventDefault();  
+	                
+	                // oInp.innerHTML = "<br/>Touch moved (" + event.touches[0].clientX + "," + event.touches[0].clientY + ")";  
+	                onPointerMove(event.touches[0].clientX, event.touches[0].clientY);
+
+	                break;  
+	        }  
+	          
+	    }  
+	
+		var onPointerDown = function(pointerX, pointerY) {
+			console.log('down...',pointerX, pointerY);
+
+		}
+
+		var onPointerMove = function(pointerX, pointerY){
+			
+		}
+
+		var onPointerUp = function(){
+			console.log('up')
+		}
+
+	</script>
+	<script>
+		// world\worldView\worldViewProjection
+		// view\projection\viewProjection"color";
+		// "position";"normal";"tangent";"uv";"uv2";"uv3";"uv4";"uv5";"uv6";
+	</script>
+</body>
+</html>

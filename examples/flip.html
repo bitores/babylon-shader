@@ -485,7 +485,8 @@
 		    canvas.addEventListener('mousesup',touch, false);
 		}
 		 
-	      
+	    
+	    var mousedown = false;
 	    function touch (event){  
 	        var event = event || window.event;  
 	          
@@ -494,7 +495,7 @@
 	        switch(event.type){  
 	        	case "mousedown":
 	        		onPointerDown(event.pageX, event.pageY)
-
+	        		mousedown = true;
 	        		break;
 	            case "touchstart":  
 	                // oInp.innerHTML = "Touch started (" +  + "," +  + ")"; 
@@ -503,6 +504,8 @@
 	                break;  
 	            case "mouseup":
 	            	onPointerUp();
+	            	mousedown = false;
+	            	console.log("mouseup......");
 	            	break;
 	            case "touchend":  
 	                // oInp.innerHTML = "<br/>Touch end (" + event.changedTouches[0].clientX + "," + event.changedTouches[0].clientY + ")";  event.changedTouches[0].clientX, event.changedTouches[0].clientY
@@ -513,6 +516,7 @@
 	            	event.preventDefault();  
 	                
 	                // oInp.innerHTML = "<br/>Touch moved (" + event.touches[0].clientX + "," + event.touches[0].clientY + ")";  
+	                if(mousedown)
 	                onPointerMove(event.pageX, event.pageY);
 
 	            	break;
