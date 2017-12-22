@@ -152,7 +152,7 @@
 
 		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
 
-        _gl = engine._gl;
+        // _gl = engine._gl;
 
         var canvas = document.getElementById('testCanvas');
         _gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
@@ -365,7 +365,7 @@
             
             gl.viewport(0, 0, this.resolution, this.resolution);
 
-                        // 绘制到缓冲区0
+            // 绘制到缓冲区0
             gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffers[0]);
             bindTexture(this.textures[1]);
             gl.useProgram(this.updateProgram[0].id);
@@ -400,6 +400,8 @@
             gl.uniform1i(this.renderProgram.locations.samplerRipples, 1);
             
             this.drawQuad();
+
+            console.log(1)
         },
         
         drawQuad: function() {

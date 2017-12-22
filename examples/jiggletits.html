@@ -22,6 +22,7 @@
 	<script src="babylon.2.5.max.js"></script>
 	<style>
 		#renderCanvas{
+			outline: none;
 			position: fixed;
 			left: 0;bottom: 0;right: 0;top: 0;
 			margin: auto;
@@ -53,7 +54,6 @@
 		uniform sampler2D bumpMap;
 		uniform sampler2D weightMap;
 		uniform vec3 force;
-		uniform float forceAppled;
 		uniform float deltaTime;
 		uniform float inverseViewportWidth;
 		uniform float inverseViewportHeight;
@@ -267,15 +267,23 @@
 	    nextBumpMaterial.setTexture('bumpMap', dynamicTexture);
 		nextBumpMaterial.setTexture('weightMap', new BABYLON.Texture("images/jiggle/weight.jpg",scene))
 
-		nextBumpMaterial.setVector3('force', new BABYLON.Vector3(0,0,0));
-		nextBumpMaterial.setFloat('forceAppled', 1);
+		nextBumpMaterial.setVector3('force', new BABYLON.Vector3(0.6,0.5,1)); // 0 - 1.0
 		nextBumpMaterial.setFloat('deltaTime', 0.0175);
 		nextBumpMaterial.setFloat('inverseViewportWidth', window.innerWidth);
 		nextBumpMaterial.setFloat('inverseViewportHeight', window.innerHeight);
 
 
+		var swapMaterial = new BABYLON.ShaderMaterial("",scene,{ 
+	    	vertexElement: "blendVertexShader", 
+	    	fragmentElement: "swapFragmentShader"
+	    },{
+	    	attributes:['position','uv'],
+	    	uniforms:['worldViewProjection','usTexture']
+	    });
 
-
+	    swapMaterial.setTexture('usTexture', dynamicTexture);
+	    swapMaterial.setFloat('inverseViewportWidth', window.innerWidth);
+	    swapMaterial.setFloat('inverseViewportHeight', window.innerHeight);
 	   
 		plane.material = nextBumpMaterial;
 		plane.material.backFaceCulling = false;
@@ -285,10 +293,7 @@
 
 		assetsManager.onFinish = () => {
 
-
-
 			scene.registerBeforeRender(function() {
-
 
 		        
 		    });
