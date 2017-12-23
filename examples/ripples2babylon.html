@@ -152,10 +152,10 @@
 
 		var light = new BABYLON.HemisphericLight('', new BABYLON.Vector3(0, 1, 0), scene);
 
-        // _gl = engine._gl;
+        _gl = engine._gl;
 
-        var canvas = document.getElementById('testCanvas');
-        _gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        // var canvas = document.getElementById('testCanvas');
+        // _gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
 
         canvas.width = canvas.height = Math.max(window.innerWidth, window.innerHeight);
 
@@ -230,8 +230,8 @@
             this.context = gl = options.GL;
   
             // Load extensions
-            gl.getExtension('OES_texture_float');
-            gl.getExtension('OES_texture_float_linear');
+            // gl.getExtension('OES_texture_float');
+            // gl.getExtension('OES_texture_float_linear');
             
 
             canvas.addEventListener("mousemove", function(e){
@@ -263,32 +263,39 @@
             this.textures = [];
             this.framebuffers = [];
 
+
+
             for (var i = 0; i < 2; i++) {
-                var texture = gl.createTexture();
-                var framebuffer = gl.createFramebuffer();
+                // var texture = gl.createTexture();
+                // var framebuffer = gl.createFramebuffer();
                 
-                gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-                framebuffer.width = this.resolution;
-                framebuffer.height = this.resolution;
+                // gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+                // framebuffer.width = this.resolution;
+                // framebuffer.height = this.resolution;
 
-                gl.bindTexture(gl.TEXTURE_2D, texture);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); 
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.resolution, this.resolution, 0, gl.RGBA, gl.FLOAT, null);
+                // gl.bindTexture(gl.TEXTURE_2D, texture);
+                // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); 
+                // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                // gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.resolution, this.resolution, 0, gl.RGBA, gl.FLOAT, null);
 
-                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-                if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
-                    throw new Error('Rendering to this texture is not supported (incomplete framebuffer)');
-                }
+                // gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+                // if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
+                //     throw new Error('Rendering to this texture is not supported (incomplete framebuffer)');
+                // }
                 
-                gl.bindTexture(gl.TEXTURE_2D, null);
-                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                // gl.bindTexture(gl.TEXTURE_2D, null);
+                // gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+                var tt = engine.createRenderTargetTexture(this.resolution);
+                console.log(tt);
                 
-                this.textures.push(texture);
-                this.framebuffers.push(framebuffer);
+                this.textures.push(tt);
+                this.framebuffers.push(tt._framebuffer);
             }
+
+
 
             // Init GL stuff
             this.quad = gl.createBuffer();
@@ -303,37 +310,86 @@
             this.initShaders();
             
             // Init textures
-            var image = new Image;
-            image.crossOrigin = '';
-            image.onload = function() {
-                gl = that.context;
+            // var image = new Image;
+            // image.crossOrigin = '';
+
+
+            // image.onload = function() {
+            //     gl = that.context;
                 
-                function isPowerOfTwo(x) {
-                    return (x & (x - 1)) == 0;
-                }
+            //     function isPowerOfTwo(x) {
+            //         return (x & (x - 1)) == 0;
+            //     }
                 
-                var wrapping = (isPowerOfTwo(image.width) && isPowerOfTwo(image.height)) ? gl.REPEAT : gl.CLAMP_TO_EDGE;
+            //     var wrapping = (isPowerOfTwo(image.width) && isPowerOfTwo(image.height)) ? gl.REPEAT : gl.CLAMP_TO_EDGE;
                 
-                that.backgroundWidth = image.width;
-                that.backgroundHeight = image.height;
+            //     that.backgroundWidth = image.width;
+            //     that.backgroundHeight = image.height;
                 
-                var texture = gl.createTexture();
+            //     var texture = gl.createTexture();
                 
-                gl.bindTexture(gl.TEXTURE_2D, texture);
-                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapping);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapping);
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+            //     gl.bindTexture(gl.TEXTURE_2D, texture);
+            //     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+            //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapping);
+            //     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapping);
+            //     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
                 
-                that.backgroundTexture = texture;
+            //     that.backgroundTexture = texture;
                 
-                // Everything loaded successfully - hide the CSS background image
-                // that.$el.css('backgroundImage', 'none');
+            //     // Everything loaded successfully - hide the CSS background image
+            //     // that.$el.css('backgroundImage', 'none');
+            //     console.log(texture);
+            // };
+            // image.src = backgroundUrl;
+
+            that.backgroundTexture = engine.createTexture(backgroundUrl, true, true, scene);
+
+
+            var ImageTexture = function(img, scene) {
+                BABYLON.Texture.call(this, null, scene);
+                var texture = scene.getEngine()._gl.createTexture();
+                texture._baseWidth = img.width;
+                texture._baseHeight = img.height;
+                texture._width = img.width;
+                texture._height = img.height;
+                console.log(img.width);
+                texture.references = 1;
+                texture.samplingMode = BABYLON.Texture.TRILINEAR_SAMPLINGMODE;
+                this._texture = texture;
+
+                this.setImage(img, true);
+
+                return this._texture;
             };
-            image.src = backgroundUrl;
-            
+
+            ImageTexture.prototype = BABYLON.Texture.prototype;
+
+            ImageTexture.prototype.setImage = function(img, isFirst) {
+                var gl = this.getScene().getEngine()._gl;
+                gl.bindTexture(gl.TEXTURE_2D, this._texture);
+                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+                if (isFirst) {
+                    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+                    //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                } else {
+                    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, img);
+                }
+                //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); 
+                //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.bindTexture(gl.TEXTURE_2D, null);
+                this._texture.isReady = true;
+            }
+
+
+            // that.backgroundUrl, BABYLON.Texture.BILINEAR_SAMPLINGMODE
+
+            console.log(that.backgroundTexture)
+
+            // that.backgroundTexture = new BABYLON.Texture(backgroundUrl,scene);
+
             this.visible = true;
 
             that.computeTextureBoundaries();
@@ -391,20 +447,27 @@
             gl.useProgram(this.renderProgram.id);
             
             bindTexture(this.backgroundTexture, 0);
-            bindTexture(this.textures[0], 1);
-            
+            bindTexture(this.textures[1], 1);
+
+            // return;
+
+            this.drawQuad();
+            return;
+
             // gl.uniform2fv(this.renderProgram.locations.topLeft, this.renderProgram.uniforms.topLeft);
             // gl.uniform2fv(this.renderProgram.locations.bottomRight, this.renderProgram.uniforms.bottomRight);
+
             gl.uniform2fv(this.renderProgram.locations.containerRatio, this.renderProgram.uniforms.containerRatio);
             gl.uniform1i(this.renderProgram.locations.samplerBackground, 0);
             gl.uniform1i(this.renderProgram.locations.samplerRipples, 1);
             
             this.drawQuad();
 
-            console.log(1)
+            
         },
         
         drawQuad: function() {
+
             gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
             gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
             gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
@@ -418,8 +481,8 @@
                 0
             ]);
             this.renderProgram.uniforms.bottomRight = new Float32Array([
-                0.5,
-                0.5
+                1,
+                1
             ]);
             
             var maxSide = Math.max(this.canvas.width, this.canvas.height);
@@ -493,8 +556,13 @@
 
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             // Switch textures
-            var t = this.framebuffers[0]; this.framebuffers[0] = this.framebuffers[1]; this.framebuffers[1] = t;
-                t = this.textures[0]; this.textures[0] = this.textures[1]; this.textures[1] = t;
+            var t = this.framebuffers[0]; 
+                this.framebuffers[0] = this.framebuffers[1]; 
+                this.framebuffers[1] = t;
+                t = this.textures[0]; 
+                this.textures[0] = 
+                this.textures[1]; 
+                this.textures[1] = t;
             
             
         }
@@ -506,7 +574,7 @@
         perturbance: 0.04,
         canvas:canvas,
         GL:_gl,
-        backgroundUrl:'images/bg2.jpg'
+        backgroundUrl:'images/cloud.png'
     });
 	</script>
 </body>
