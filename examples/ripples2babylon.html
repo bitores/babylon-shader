@@ -446,13 +446,13 @@
             // gl.clearColor(0,0,0,0);
             gl.useProgram(this.renderProgram.id);
             
-            bindTexture(this.backgroundTexture, 0);
+            bindTexture(this.textures[0], 0);
             bindTexture(this.textures[1], 1);
 
             // return;
 
-            this.drawQuad();
-            return;
+            // this.drawQuad();
+            // return;
 
             // gl.uniform2fv(this.renderProgram.locations.topLeft, this.renderProgram.uniforms.topLeft);
             // gl.uniform2fv(this.renderProgram.locations.bottomRight, this.renderProgram.uniforms.bottomRight);
