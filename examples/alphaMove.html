@@ -26,6 +26,9 @@
 			margin: auto;
 			width: 100%;
 			height: 100%;
+
+			-ms-touch-action: none;
+    		touch-action: none;
 		}
 	</style>
 	<script type="application/vertexShader" id="blendVertexShader">
@@ -85,7 +88,7 @@
 </head>
 <body>
 <!-- https://www.eternalcoding.com/?p=113 -->
-	<canvas id="renderCanvas"></canvas>
+	<canvas id="renderCanvas" touch-action="none"></canvas>
 	<script>
 		var canvas = document.getElementById('renderCanvas');
 		var engine = new BABYLON.Engine(canvas, true);
